@@ -50,6 +50,9 @@
         .btn-action { background: #e67e22; box-shadow: 0 2px 4px rgba(230, 126, 34, 0.3); }
         .btn-action:hover { background: #d35400; }
         
+        .btn-shop { background: #8e44ad; box-shadow: 0 2px 4px rgba(142, 68, 173, 0.3); }
+        .btn-shop:hover { background: #732d91; }
+
         #instruction {
             position: absolute; top: 80px; left: 50%; transform: translateX(-50%);
             color: #2c3e50; font-size: 15px; font-weight: bold; text-align: center;
@@ -57,6 +60,18 @@
             pointer-events: none; display: none; border: 1px solid #dee2e6;
         }
         .highlight { color: #8e44ad; }
+
+        /* Shop Modal Styles */
+        #shop-modal {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 400px; display: none; flex-direction: column; gap: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2); z-index: 10;
+        }
+        #shop-modal h2 { margin: 0 0 10px 0; color: #2c3e50; text-align: center; border-bottom: 2px solid #e9ecef; padding-bottom: 10px;}
+        .shop-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; background: #f8f9fa; border-radius: 6px; border: 1px solid #dee2e6; }
+        .shop-info strong { display: block; color: #2c3e50; font-size: 15px; }
+        .shop-info span { font-size: 12px; color: #6c757d; }
+        .shop-btn { padding: 8px 16px; font-size: 13px; }
     </style>
 </head>
 <body>
@@ -71,9 +86,28 @@
             <div><span class="stat-label">Lives</span><span id="ui-lives">20</span></div>
         </div>
         <div id="instruction">Scroll to Resize. <br>Snap to <span class="highlight">Nodes</span> for +50% Damage!</div>
+        
         <div id="bottom-bar" class="panel">
             <button class="btn" id="btn-buy-turret">Buy Turret ($50)</button>
+            <button class="btn btn-shop" id="btn-open-shop">Open Shop</button>
             <button class="btn btn-action" id="btn-start-wave">Start Wave 1</button>
+        </div>
+
+        <div id="shop-modal" class="panel">
+            <h2>Global Upgrades</h2>
+            <div class="shop-item">
+                <div class="shop-info"><strong>Damage</strong><span id="txt-upg-dmg">Lvl 0 (+0%)</span></div>
+                <button class="btn shop-btn" id="btn-upg-dmg">$150</button>
+            </div>
+            <div class="shop-item">
+                <div class="shop-info"><strong>Fire Rate</strong><span id="txt-upg-fire">Lvl 0 (+0%)</span></div>
+                <button class="btn shop-btn" id="btn-upg-fire">$150</button>
+            </div>
+            <div class="shop-item">
+                <div class="shop-info"><strong>Range</strong><span id="txt-upg-range">Lvl 0 (+0%)</span></div>
+                <button class="btn shop-btn" id="btn-upg-range">$100</button>
+            </div>
+            <button class="btn" id="btn-close-shop" style="margin-top: 10px; background: #e74c3c;">Close & Resume</button>
         </div>
     </div>
 
@@ -81,31 +115,26 @@
     /** MODULE: GeometrySystem */
     class GeometrySystem {
         static getRegularPolygon(cx, cy, sides, radius) {
-            const points = [];
-            const offset = -Math.PI / 2; 
+            const points = []; const offset = -Math.PI / 2; 
             for (let i = 0; i < sides; i++) {
                 const angle = offset + (i * 2 * Math.PI) / sides;
                 points.push({ x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) });
-            }
-            return points;
+            } return points;
         }
         static distSquared(p1, p2) { return (p2.x - p1.x)**2 + (p2.y - p1.y)**2; }
         
         static isPointInPolygon(p, polygon) {
             let inside = false;
             for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-                let xi = polygon[i].x, yi = polygon[i].y;
-                let xj = polygon[j].x, yj = polygon[j].y;
+                let xi = polygon[i].x, yi = polygon[i].y; let xj = polygon[j].x, yj = polygon[j].y;
                 let intersect = ((yi > p.y) !== (yj > p.y)) && (p.x < (xj - xi) * (p.y - yi) / (yj - yi) + xi);
                 if (intersect) inside = !inside;
-            }
-            return inside;
+            } return inside;
         }
         static distToSegmentSquared(p, v, w) {
             let l2 = this.distSquared(v, w);
             if (l2 === 0) return this.distSquared(p, v);
-            let t = ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / l2;
-            t = Math.max(0, Math.min(1, t));
+            let t = ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / l2; t = Math.max(0, Math.min(1, t));
             return this.distSquared(p, { x: v.x + t * (w.x - v.x), y: v.y + t * (w.y - v.y) });
         }
         static isCircleInsidePolygon(cx, cy, radius, polygon) {
@@ -115,8 +144,7 @@
             for (let i = 0; i < polygon.length; i++) {
                 let p1 = polygon[i]; let p2 = polygon[(i + 1) % polygon.length];
                 if (this.distToSegmentSquared(center, p1, p2) < r2) return false;
-            }
-            return true;
+            } return true;
         }
         static doCirclesOverlap(x1, y1, r1, x2, y2, r2) {
             return this.distSquared({x: x1, y: y1}, {x: x2, y: y2}) < (r1 + r2)**2;
@@ -128,8 +156,7 @@
         constructor(canvasId) {
             this.canvas = document.getElementById(canvasId);
             this.ctx = this.canvas.getContext('2d', { alpha: false });
-            this.resize();
-            window.addEventListener('resize', () => this.resize());
+            this.resize(); window.addEventListener('resize', () => this.resize());
 
             this.colors = {
                 bg: '#f8f9fa', grid: '#e9ecef', axis: '#ced4da',
@@ -138,8 +165,7 @@
                 turretNormal: '#2980b9', turretSynergy: '#8e44ad',
                 valid: 'rgba(46, 204, 113, 0.3)', validOutline: '#27ae60',
                 invalid: 'rgba(231, 76, 60, 0.3)', invalidOutline: '#c0392b',
-                enemy: '#e67e22', projectile: '#2c3e50',
-                hitFlash: '#ffffff'
+                enemy: '#e67e22', boss: '#c0392b', projectile: '#2c3e50', hitFlash: '#ffffff'
             };
         }
         resize() {
@@ -149,17 +175,13 @@
         }
         clear() { this.ctx.fillStyle = this.colors.bg; this.ctx.fillRect(0, 0, this.width, this.height); }
         drawGrid(cellSize = 40) {
-            this.ctx.lineWidth = 1; this.ctx.strokeStyle = this.colors.grid;
-            this.ctx.beginPath();
+            this.ctx.lineWidth = 1; this.ctx.strokeStyle = this.colors.grid; this.ctx.beginPath();
             for (let x = this.centerX % cellSize; x < this.width; x += cellSize) { this.ctx.moveTo(x, 0); this.ctx.lineTo(x, this.height); }
             for (let y = this.centerY % cellSize; y < this.height; y += cellSize) { this.ctx.moveTo(0, y); this.ctx.lineTo(this.width, y); }
             this.ctx.stroke();
-            
-            this.ctx.strokeStyle = this.colors.axis; this.ctx.lineWidth = 2;
-            this.ctx.beginPath();
+            this.ctx.strokeStyle = this.colors.axis; this.ctx.lineWidth = 2; this.ctx.beginPath();
             this.ctx.moveTo(this.centerX, 0); this.ctx.lineTo(this.centerX, this.height);
-            this.ctx.moveTo(0, this.centerY); this.ctx.lineTo(this.width, this.centerY);
-            this.ctx.stroke();
+            this.ctx.moveTo(0, this.centerY); this.ctx.lineTo(this.width, this.centerY); this.ctx.stroke();
         }
         drawPolygon(points, fillStyle, strokeStyle, lineWidth = 3) {
             if (points.length < 3) return;
@@ -174,26 +196,19 @@
             if (fillStyle) { this.ctx.fillStyle = fillStyle; this.ctx.fill(); }
             if (strokeStyle) {
                 this.ctx.lineWidth = lineWidth; this.ctx.strokeStyle = strokeStyle;
-                if (isDashed) this.ctx.setLineDash([5, 5]);
-                this.ctx.stroke();
-                this.ctx.setLineDash([]);
+                if (isDashed) this.ctx.setLineDash([5, 5]); this.ctx.stroke(); this.ctx.setLineDash([]);
             }
         }
-        drawNode(x, y) {
-            this.drawCircle(x, y, 6, this.colors.node, null);
-            this.drawCircle(x, y, 14, this.colors.nodeGlow, null);
-        }
+        drawNode(x, y) { this.drawCircle(x, y, 6, this.colors.node, null); this.drawCircle(x, y, 14, this.colors.nodeGlow, null); }
     }
 
     /** MODULE: InputManager */
     class InputManager {
         constructor(canvas) {
-            this.mouse = { x: 0, y: 0, isDown: false, clicked: false, rightClicked: false };
-            this.scrollDelta = 0;
+            this.mouse = { x: 0, y: 0, isDown: false, clicked: false, rightClicked: false }; this.scrollDelta = 0;
             canvas.addEventListener('mousemove', (e) => { this.mouse.x = e.clientX; this.mouse.y = e.clientY; });
             canvas.addEventListener('mousedown', (e) => {
-                if (e.button === 0) { this.mouse.isDown = true; this.mouse.clicked = true; }
-                else if (e.button === 2) { this.mouse.rightClicked = true; }
+                if (e.button === 0) { this.mouse.isDown = true; this.mouse.clicked = true; } else if (e.button === 2) { this.mouse.rightClicked = true; }
             });
             canvas.addEventListener('mouseup', (e) => { if (e.button === 0) this.mouse.isDown = false; });
             canvas.addEventListener('contextmenu', e => e.preventDefault());
@@ -202,67 +217,88 @@
         resetFrame() { this.mouse.clicked = false; this.mouse.rightClicked = false; this.scrollDelta = 0; }
     }
 
-    /** MODULE: Projectile (NOW WITH HOMING) */
-    class Projectile {
-        constructor(x, y, target, speed, damage) {
-            this.x = x; this.y = y;
-            this.target = target;
-            this.speed = speed;
-            this.damage = damage;
-            this.radius = 4;
+    /** MODULE: UpgradeSystem */
+    class UpgradeSystem {
+        constructor() {
+            this.dmgLvl = 0; this.fireLvl = 0; this.rangeLvl = 0;
             
-            // Initial velocity calculation
-            let angle = Math.atan2(target.y - y, target.x - x);
-            this.vx = Math.cos(angle) * speed;
-            this.vy = Math.sin(angle) * speed;
+            // Multipliers applied dynamically to turrets
+            this.dmgMulti = 1.0; 
+            this.fireMulti = 1.0; // Lower is better (divides cooldown)
+            this.rangeMulti = 1.0;
+
+            this.dmgCost = 150;
+            this.fireCost = 150;
+            this.rangeCost = 100;
         }
-        update(dt) {
-            // Homing Logic: Steer towards the target if it is still alive
-            if (this.target && this.target.hp > 0) {
-                let angle = Math.atan2(this.target.y - this.y, this.target.x - this.x);
-                this.vx = Math.cos(angle) * this.speed;
-                this.vy = Math.sin(angle) * this.speed;
-            }
-            
-            this.x += this.vx * dt;
-            this.y += this.vy * dt;
+
+        buyDamage(game) {
+            if (game.money >= this.dmgCost) {
+                game.money -= this.dmgCost;
+                this.dmgLvl++; this.dmgMulti += 0.20; // +20% per level
+                this.dmgCost = Math.floor(this.dmgCost * 1.5); // Cost scales by 1.5x
+                return true;
+            } return false;
         }
-        draw(renderer) { 
-            renderer.drawCircle(this.x, this.y, this.radius, renderer.colors.projectile, null); 
+        buyFireRate(game) {
+            if (game.money >= this.fireCost) {
+                game.money -= this.fireCost;
+                this.fireLvl++; this.fireMulti += 0.15; // divides cooldown, meaning faster
+                this.fireCost = Math.floor(this.fireCost * 1.5);
+                return true;
+            } return false;
+        }
+        buyRange(game) {
+            if (game.money >= this.rangeCost) {
+                game.money -= this.rangeCost;
+                this.rangeLvl++; this.rangeMulti += 0.15; // +15% per level
+                this.rangeCost = Math.floor(this.rangeCost * 1.5);
+                return true;
+            } return false;
         }
     }
 
-    /** MODULE: Enemy */
+    /** MODULE: Projectile */
+    class Projectile {
+        constructor(x, y, target, speed, damage) {
+            this.x = x; this.y = y; this.target = target; this.speed = speed; this.damage = damage; this.radius = 4;
+            let angle = Math.atan2(target.y - y, target.x - x);
+            this.vx = Math.cos(angle) * speed; this.vy = Math.sin(angle) * speed;
+        }
+        update(dt) {
+            if (this.target && this.target.hp > 0) {
+                let angle = Math.atan2(this.target.y - this.y, this.target.x - this.x);
+                this.vx = Math.cos(angle) * this.speed; this.vy = Math.sin(angle) * this.speed;
+            }
+            this.x += this.vx * dt; this.y += this.vy * dt;
+        }
+        draw(renderer) { renderer.drawCircle(this.x, this.y, this.radius, renderer.colors.projectile, null); }
+    }
+
+    /** MODULE: Enemy Base & Boss */
     class Enemy {
         constructor(maxHp) {
             this.hp = maxHp; this.maxHp = maxHp;
-            this.progress = 1.0; 
-            this.speed = 0.05;   
-            this.radius = 12;
-            this.x = 0; this.y = 0;
-            this.hitTimer = 0; // For visual hit flashing
+            this.progress = 1.0; this.speed = 0.05;   
+            this.radius = 12; this.x = 0; this.y = 0; this.hitTimer = 0;
+            this.reward = 10;
         }
         update(dt, centerX, centerY, targetRadius) {
             if (this.hitTimer > 0) this.hitTimer -= dt;
-            
             this.progress -= this.speed * dt;
-            if (this.progress <= 0) return true; // Reached base
+            if (this.progress <= 0) return true; // Base reached
             
             const angle = this.progress * Math.PI * 6; 
             const startDist = Math.max(window.innerWidth, window.innerHeight);
             const dist = targetRadius + (startDist - targetRadius) * this.progress;
             
-            this.x = centerX + Math.cos(angle) * dist;
-            this.y = centerY + Math.sin(angle) * dist;
+            this.x = centerX + Math.cos(angle) * dist; this.y = centerY + Math.sin(angle) * dist;
             return false;
         }
         draw(renderer) {
             renderer.ctx.shadowBlur = 4; renderer.ctx.shadowColor = 'rgba(0,0,0,0.5)'; renderer.ctx.shadowOffsetY = 2;
-            
-            // Flash white when hit
             let color = this.hitTimer > 0 ? renderer.colors.hitFlash : renderer.colors.enemy;
             renderer.drawCircle(this.x, this.y, this.radius, color, '#d35400', 2);
-            
             renderer.ctx.shadowBlur = 0; renderer.ctx.shadowOffsetY = 0;
             
             const hpPct = Math.max(0, this.hp / this.maxHp);
@@ -271,24 +307,54 @@
         }
     }
 
-    /** MODULE: Turret */
+    class Boss extends Enemy {
+        constructor(maxHp) {
+            super(maxHp * 8); // Bosses have massive HP
+            this.radius = 24; // Much larger
+            this.speed = 0.025; // Moves slower
+            this.reward = 150; // Huge bounty
+        }
+        draw(renderer) {
+            // Boss heavy 3D shadow style
+            renderer.ctx.shadowBlur = 15; renderer.ctx.shadowColor = 'rgba(192, 57, 43, 0.7)'; renderer.ctx.shadowOffsetY = 5;
+            let color = this.hitTimer > 0 ? renderer.colors.hitFlash : renderer.colors.boss;
+            
+            // Draw an imposing Octagon for the boss instead of a circle
+            const points = GeometrySystem.getRegularPolygon(this.x, this.y, 8, this.radius);
+            renderer.drawPolygon(points, color, '#78281f', 3);
+            
+            renderer.ctx.shadowBlur = 0; renderer.ctx.shadowOffsetY = 0;
+            
+            // Huge healthbar
+            const hpPct = Math.max(0, this.hp / this.maxHp);
+            renderer.ctx.fillStyle = 'red'; renderer.ctx.fillRect(this.x - 20, this.y - 35, 40, 6);
+            renderer.ctx.fillStyle = '#2ecc71'; renderer.ctx.fillRect(this.x - 20, this.y - 35, 40 * hpPct, 6);
+        }
+    }
+
+    /** MODULE: Turret (Dynamically reads upgrades) */
     class Turret {
         constructor(x, y, radius, isSnapped) {
             this.x = x; this.y = y; this.radius = radius;
-            this.angle = 0; this.cooldownTimer = 0;
-            this.isSnapped = isSnapped; 
+            this.angle = 0; this.cooldownTimer = 0; this.isSnapped = isSnapped; 
             
             let scaleFactor = radius / 15; 
-            this.range = radius * 2.5 + 80; 
-            this.damage = Math.pow(scaleFactor, 2) * 10;
-            if (this.isSnapped) this.damage *= 1.5; 
-            
-            this.fireRate = scaleFactor * 0.4; 
+            this.baseRange = radius * 2.5 + 80; 
+            this.baseDamage = Math.pow(scaleFactor, 2) * 10;
+            if (this.isSnapped) this.baseDamage *= 1.5; 
+            this.baseFireRate = scaleFactor * 0.4; 
         }
-        update(dt, enemies, spawnProjectileCb) {
+        
+        // Dynamically calculate stats based on Global Upgrades
+        getCurrentRange(upgrades) { return this.baseRange * upgrades.rangeMulti; }
+        getCurrentDamage(upgrades) { return this.baseDamage * upgrades.dmgMulti; }
+        getCurrentFireRate(upgrades) { return this.baseFireRate / upgrades.fireMulti; }
+
+        update(dt, enemies, upgrades, spawnProjectileCb) {
             this.cooldownTimer -= dt;
             let target = null;
-            let minDt = this.range * this.range;
+            let currentRange = this.getCurrentRange(upgrades);
+            let minDt = currentRange * currentRange;
             
             for (let e of enemies) {
                 let distSq = GeometrySystem.distSquared(this, e);
@@ -298,30 +364,27 @@
             if (target) {
                 this.angle = Math.atan2(target.y - this.y, target.x - this.x);
                 if (this.cooldownTimer <= 0) {
-                    this.cooldownTimer = this.fireRate;
-                    // Passing the target reference for Homing behavior (Speed: 800)
-                    spawnProjectileCb(this.x, this.y, target, 800, this.damage);
+                    this.cooldownTimer = this.getCurrentFireRate(upgrades);
+                    spawnProjectileCb(this.x, this.y, target, 800, this.getCurrentDamage(upgrades));
                 }
             }
         }
-        draw(renderer) {
+        draw(renderer, upgrades) {
             const color = this.isSnapped ? renderer.colors.turretSynergy : renderer.colors.turretNormal;
-            
-            if (this.isSnapped) {
-                renderer.drawCircle(this.x, this.y, this.radius + 4, renderer.colors.nodeGlow, null);
-            }
+            let currentRange = this.getCurrentRange(upgrades);
+
+            if (this.isSnapped) renderer.drawCircle(this.x, this.y, this.radius + 4, renderer.colors.nodeGlow, null);
             
             renderer.drawCircle(this.x, this.y, this.radius, 'white', color, 2);
-            renderer.drawCircle(this.x, this.y, this.range, null, 'rgba(41, 128, 185, 0.1)', 1, true);
+            renderer.drawCircle(this.x, this.y, currentRange, null, 'rgba(41, 128, 185, 0.15)', 1, true);
             
-            renderer.ctx.beginPath();
-            renderer.ctx.moveTo(this.x, this.y);
+            renderer.ctx.beginPath(); renderer.ctx.moveTo(this.x, this.y);
             renderer.ctx.lineTo(this.x + Math.cos(this.angle) * this.radius, this.y + Math.sin(this.angle) * this.radius);
             renderer.ctx.strokeStyle = color; renderer.ctx.lineWidth = 3; renderer.ctx.stroke();
         }
     }
 
-    /** MODULE: PlacementSystem with FIXED Inner Node Snapping */
+    /** MODULE: PlacementSystem */
     class PlacementSystem {
         constructor() {
             this.isPlacing = false; this.currentRadius = 25;
@@ -334,24 +397,15 @@
         update(input, polygonPoints, nodes, placedTurrets) {
             if (!this.isPlacing) return null;
             if (input.mouse.rightClicked) { this.endPlacement(); return null; }
-
             if (input.scrollDelta !== 0) {
                 this.currentRadius -= input.scrollDelta * 4;
                 this.currentRadius = Math.max(this.minRadius, Math.min(this.maxRadius, this.currentRadius));
             }
 
-            let mx = input.mouse.x; let my = input.mouse.y;
-            this.isSnapped = false;
-
-            // Check Snapping to Nodes (25px radius)
+            let mx = input.mouse.x; let my = input.mouse.y; this.isSnapped = false;
             for (let node of nodes) {
-                if (GeometrySystem.distSquared({x: mx, y: my}, node) < 625) {
-                    mx = node.x; my = node.y;
-                    this.isSnapped = true;
-                    break;
-                }
+                if (GeometrySystem.distSquared({x: mx, y: my}, node) < 625) { mx = node.x; my = node.y; this.isSnapped = true; break; }
             }
-
             let insidePoly = GeometrySystem.isCircleInsidePolygon(mx, my, this.currentRadius, polygonPoints);
             let overlapping = false;
             for (let t of placedTurrets) {
@@ -360,67 +414,75 @@
             this.isValid = insidePoly && !overlapping;
 
             if (input.mouse.clicked && this.isValid) {
-                this.endPlacement();
-                return new Turret(mx, my, this.currentRadius, this.isSnapped);
-            }
-            return null;
+                this.endPlacement(); return new Turret(mx, my, this.currentRadius, this.isSnapped);
+            } return null;
         }
-        drawPreview(renderer, input) {
+        drawPreview(renderer, input, upgrades) {
             if (!this.isPlacing) return;
             let drawX = input.mouse.x; let drawY = input.mouse.y;
             if (this.isSnapped) {
-                drawX = this.isValid ? drawX : input.mouse.x; // Stay snapped visually if valid
+                drawX = this.isValid ? drawX : input.mouse.x;
                 if (this.isValid) renderer.drawCircle(drawX, drawY, this.currentRadius + 6, renderer.colors.nodeGlow, null);
             }
-
             const fill = this.isValid ? renderer.colors.valid : renderer.colors.invalid;
             const stroke = this.isValid ? renderer.colors.validOutline : renderer.colors.invalidOutline;
+            
             renderer.drawCircle(drawX, drawY, this.currentRadius, fill, stroke, 2);
-            renderer.drawCircle(drawX, drawY, this.currentRadius * 2.5 + 80, null, stroke, 1, true);
+            // Dynamic preview range based on upgrades
+            let previewRange = (this.currentRadius * 2.5 + 80) * upgrades.rangeMulti;
+            renderer.drawCircle(drawX, drawY, previewRange, null, stroke, 1, true);
         }
     }
 
     /** MODULE: WaveManager */
     class WaveManager {
         constructor() {
-            this.wave = 1;
-            this.state = 'WAITING'; // WAITING, ACTIVE
-            this.enemiesToSpawn = 0;
-            this.spawnTimer = 0;
-            this.spawnRate = 2.0;
+            this.wave = 1; this.state = 'WAITING';
+            this.enemiesToSpawn = 0; this.spawnTimer = 0; this.spawnRate = 2.0;
+            this.isBossWave = false;
         }
         startWave() {
             this.state = 'ACTIVE';
-            this.enemiesToSpawn = 5 + (this.wave * 2); 
-            this.spawnRate = Math.max(0.5, 2.0 - (this.wave * 0.15)); // Scales faster
+            this.isBossWave = (this.wave % 5 === 0);
             
+            if (this.isBossWave) {
+                this.enemiesToSpawn = 1; // Just 1 Massive Boss
+                this.spawnRate = 1.0;
+            } else {
+                this.enemiesToSpawn = 5 + (this.wave * 2); 
+                this.spawnRate = Math.max(0.4, 2.0 - (this.wave * 0.15));
+            }
             document.getElementById('btn-start-wave').style.display = 'none';
+            document.getElementById('btn-open-shop').style.display = 'none'; // Hide shop during wave
         }
         endWave(gameRef) {
-            this.state = 'WAITING';
-            this.wave++;
-            gameRef.money += 100 + (this.wave * 10); // Clear bonus
+            this.state = 'WAITING'; this.wave++;
+            gameRef.money += 50 + (this.wave * 15);
             gameRef.updateUI();
             
             let btn = document.getElementById('btn-start-wave');
-            btn.innerText = "Start Wave " + this.wave;
+            btn.innerText = (this.wave % 5 === 0) ? "Start BOSS Wave " + this.wave : "Start Wave " + this.wave;
+            if (this.wave % 5 === 0) btn.style.background = '#c0392b'; else btn.style.background = '#e67e22'; // Boss warning color
+            
             btn.style.display = 'block';
+            document.getElementById('btn-open-shop').style.display = 'block'; // Show shop
         }
         update(dt, gameRef) {
             if (this.state !== 'ACTIVE') return;
-            
             this.spawnTimer -= dt;
+            
             if (this.spawnTimer <= 0 && this.enemiesToSpawn > 0) {
                 this.spawnTimer = this.spawnRate;
                 this.enemiesToSpawn--;
                 
-                let hp = 15 + (this.wave * 12);
-                gameRef.enemies.push(new Enemy(hp));
+                let baseHp = 15 + (this.wave * 12);
+                if (this.isBossWave) {
+                    gameRef.enemies.push(new Boss(baseHp));
+                } else {
+                    gameRef.enemies.push(new Enemy(baseHp));
+                }
             }
-
-            if (this.enemiesToSpawn === 0 && gameRef.enemies.length === 0) {
-                this.endWave(gameRef);
-            }
+            if (this.enemiesToSpawn === 0 && gameRef.enemies.length === 0) this.endWave(gameRef);
         }
     }
 
@@ -430,35 +492,49 @@
             this.renderer = new Renderer('gameCanvas');
             this.input = new InputManager(this.renderer.canvas);
             
-            this.towerSides = 6;
-            this.towerRadius = 250;
-            this.polygonPoints = [];
-            this.constructionNodes = [];
+            this.towerSides = 6; this.towerRadius = 250;
+            this.polygonPoints = []; this.constructionNodes = [];
             
-            this.placedTurrets = [];
-            this.enemies = [];
-            this.projectiles = [];
+            this.placedTurrets = []; this.enemies = []; this.projectiles = [];
             this.placementSystem = new PlacementSystem();
             this.waveManager = new WaveManager();
+            this.upgrades = new UpgradeSystem();
 
-            this.money = 250;
-            this.lives = 20;
-            this.turretCost = 50;
+            this.money = 350; this.lives = 20; this.turretCost = 50;
+            this.isPaused = false; // For Shop Modal
 
-            this.updateUI();
-
-            document.getElementById('btn-buy-turret').addEventListener('click', (e) => {
-                e.stopPropagation();
-                if (this.money >= this.turretCost) this.placementSystem.startPlacement();
-            });
-            
-            document.getElementById('btn-start-wave').addEventListener('click', (e) => {
-                e.stopPropagation();
-                this.waveManager.startWave();
-            });
-
+            this.initUI();
             this.lastTime = performance.now();
             requestAnimationFrame((t) => this.loop(t));
+        }
+
+        initUI() {
+            this.updateUI();
+            document.getElementById('btn-buy-turret').addEventListener('click', (e) => { e.stopPropagation(); if (this.money >= this.turretCost) this.placementSystem.startPlacement(); });
+            document.getElementById('btn-start-wave').addEventListener('click', (e) => { e.stopPropagation(); this.waveManager.startWave(); });
+            
+            // Shop UI Setup
+            const shopModal = document.getElementById('shop-modal');
+            document.getElementById('btn-open-shop').addEventListener('click', () => { this.isPaused = true; shopModal.style.display = 'flex'; this.updateShopUI(); });
+            document.getElementById('btn-close-shop').addEventListener('click', () => { this.isPaused = false; shopModal.style.display = 'none'; });
+            
+            document.getElementById('btn-upg-dmg').addEventListener('click', () => { if(this.upgrades.buyDamage(this)) { this.updateUI(); this.updateShopUI(); }});
+            document.getElementById('btn-upg-fire').addEventListener('click', () => { if(this.upgrades.buyFireRate(this)) { this.updateUI(); this.updateShopUI(); }});
+            document.getElementById('btn-upg-range').addEventListener('click', () => { if(this.upgrades.buyRange(this)) { this.updateUI(); this.updateShopUI(); }});
+        }
+
+        updateShopUI() {
+            document.getElementById('txt-upg-dmg').innerText = `Lvl ${this.upgrades.dmgLvl} (+${Math.round((this.upgrades.dmgMulti - 1)*100)}%)`;
+            document.getElementById('btn-upg-dmg').innerText = `$${this.upgrades.dmgCost}`;
+            document.getElementById('btn-upg-dmg').disabled = (this.money < this.upgrades.dmgCost);
+
+            document.getElementById('txt-upg-fire').innerText = `Lvl ${this.upgrades.fireLvl} (+${Math.round((this.upgrades.fireMulti - 1)*100)}%)`;
+            document.getElementById('btn-upg-fire').innerText = `$${this.upgrades.fireCost}`;
+            document.getElementById('btn-upg-fire').disabled = (this.money < this.upgrades.fireCost);
+
+            document.getElementById('txt-upg-range').innerText = `Lvl ${this.upgrades.rangeLvl} (+${Math.round((this.upgrades.rangeMulti - 1)*100)}%)`;
+            document.getElementById('btn-upg-range').innerText = `$${this.upgrades.rangeCost}`;
+            document.getElementById('btn-upg-range').disabled = (this.money < this.upgrades.rangeCost);
         }
 
         updateUI() {
@@ -476,7 +552,6 @@
         update(dt) {
             this.polygonPoints = GeometrySystem.getRegularPolygon(this.renderer.centerX, this.renderer.centerY, this.towerSides, this.towerRadius);
             
-            // FIX: Nodes placed exactly halfway between center and vertices
             this.constructionNodes = [{x: this.renderer.centerX, y: this.renderer.centerY}];
             const offset = -Math.PI / 2;
             for (let i = 0; i < this.towerSides; i++) {
@@ -497,7 +572,7 @@
             this.waveManager.update(dt, this);
 
             for (let t of this.placedTurrets) {
-                t.update(dt, this.enemies, (x, y, target, speed, dmg) => {
+                t.update(dt, this.enemies, this.upgrades, (x, y, target, speed, dmg) => {
                     this.projectiles.push(new Projectile(x, y, target, speed, dmg));
                 });
             }
@@ -509,10 +584,8 @@
                 }
                 for (let e of this.enemies) {
                     if (GeometrySystem.distSquared(p, e) < (p.radius + e.radius)**2) {
-                        e.hp -= p.damage;
-                        e.hitTimer = 0.05; // Visual Hit Flash!
-                        this.projectiles.splice(i, 1);
-                        break;
+                        e.hp -= p.damage; e.hitTimer = 0.05; 
+                        this.projectiles.splice(i, 1); break;
                     }
                 }
             }
@@ -520,11 +593,11 @@
             for (let i = this.enemies.length - 1; i >= 0; i--) {
                 let e = this.enemies[i];
                 if (e.hp <= 0) {
-                    this.money += 10; this.updateUI(); this.enemies.splice(i, 1); continue;
+                    this.money += e.reward; this.updateUI(); this.enemies.splice(i, 1); continue;
                 }
                 if (e.update(dt, this.renderer.centerX, this.renderer.centerY, this.towerRadius)) {
                     this.lives--; this.updateUI(); this.enemies.splice(i, 1);
-                    if (this.lives <= 0) alert("Game Over! Refresh to restart.");
+                    if (this.lives <= 0) { alert("Game Over! Refresh to restart."); this.isPaused = true; }
                 }
             }
 
@@ -532,24 +605,27 @@
         }
 
         draw() {
-            this.renderer.clear();
-            this.renderer.drawGrid();
-            
+            this.renderer.clear(); this.renderer.drawGrid();
             this.renderer.drawPolygon(this.polygonPoints, this.renderer.colors.polyFill, this.renderer.colors.polyOutline, 3);
             for (let node of this.constructionNodes) this.renderer.drawNode(node.x, node.y);
 
-            for (let t of this.placedTurrets) t.draw(this.renderer);
+            // Pass upgrades down to Turret draw function so range expands dynamically!
+            for (let t of this.placedTurrets) t.draw(this.renderer, this.upgrades);
             for (let p of this.projectiles) p.draw(this.renderer);
             for (let e of this.enemies) e.draw(this.renderer);
 
-            this.placementSystem.drawPreview(this.renderer, this.input);
+            this.placementSystem.drawPreview(this.renderer, this.input, this.upgrades);
         }
 
         loop(timestamp) {
             const dt = Math.min((timestamp - this.lastTime) / 1000, 0.1); 
             this.lastTime = timestamp;
-            this.update(dt);
-            this.draw();
+            
+            if (!this.isPaused) {
+                this.update(dt);
+            }
+            this.draw(); // Always draw so the background is visible behind the shop
+            
             requestAnimationFrame((t) => this.loop(t));
         }
     }
