@@ -207,6 +207,10 @@
                 if (isDashed) this.ctx.setLineDash([5, 5]); this.ctx.stroke(); this.ctx.setLineDash([]);
             }
         }
+        drawNode(x, y) {
+            // Draws a small circle for the synergy nodes using the colors you already defined
+            this.drawCircle(x, y, 6, this.colors.node, 'white', 2);
+        }
     }
 
     /** MODULE: InputManager (FIXED: Tracks mouse globally over window!) */
