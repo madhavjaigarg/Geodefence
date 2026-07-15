@@ -31,7 +31,6 @@
             display: flex; gap: 15px; align-items: center;
         }
 
-        /* NEW: Hover Info Panel */
         #info-panel {
             position: absolute; top: 20px; right: 20px;
             width: 200px; display: none; flex-direction: column; gap: 10px;
@@ -72,6 +71,15 @@
         .shop-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; background: #f8f9fa; border-radius: 6px; border: 1px solid #dee2e6; }
         .shop-info strong { display: block; color: #2c3e50; font-size: 15px; }
         .shop-info span { font-size: 12px; color: #6c757d; }
+
+        /* Snap Toggle Checkbox Styling */
+        .snap-toggle {
+            display: flex; align-items: center; gap: 6px; font-weight: bold; font-size: 14px; 
+            color: #2c3e50; cursor: pointer; background: #ecf0f1; padding: 8px 12px; 
+            border-radius: 6px; border: 1px solid #bdc3c7; transition: background 0.2s;
+        }
+        .snap-toggle:hover { background: #e2e6e9; }
+        .snap-toggle input { cursor: pointer; width: 16px; height: 16px; margin: 0; }
     </style>
 </head>
 <body>
@@ -95,10 +103,15 @@
         <div id="instruction">Scroll to Resize. <br>Snap to <span style="color:#8e44ad">Nodes</span> for +50% Damage!</div>
         
         <div id="bottom-bar" class="panel">
+            <!-- NEW SNAP TOGGLE -->
+            <label class="snap-toggle" title="Snaps turrets perfectly to the grid, edges, and other shapes!">
+                <input type="checkbox" id="toggle-snap" checked> Snap
+            </label>
+
             <button class="btn" id="btn-buy-pulse">Pulse (Circle) $50</button>
             <button class="btn btn-rapid" id="btn-buy-rapid">Rapid (Triangle) $75</button>
             <button class="btn btn-sniper" id="btn-buy-sniper">Sniper (Square) $120</button>
-            <div style="width:20px;"></div> <!-- Spacer -->
+            <div style="width:10px;"></div>
             <button class="btn btn-shop" id="btn-open-shop">Shop</button>
             <button class="btn btn-action" id="btn-start-wave">Start Wave 1</button>
         </div>
@@ -115,7 +128,6 @@
 <script>
     /** MODULE: GeometrySystem */
     class GeometrySystem {
-        // Added rotation parameter so triangles/squares point at enemies!
         static getRegularPolygon(cx, cy, sides, radius, rotation = -Math.PI/2) {
             const points = []; 
             for (let i = 0; i < sides; i++) {
@@ -156,7 +168,6 @@
         constructor(canvasId) {
             this.canvas = document.getElementById(canvasId); this.ctx = this.canvas.getContext('2d', { alpha: false });
             this.resize(); window.addEventListener('resize', () => this.resize());
-
             this.colors = {
                 bg: '#f8f9fa', grid: '#e9ecef', axis: '#ced4da',
                 polyOutline: '#2c3e50', polyFill: 'rgba(52, 152, 219, 0.05)',
@@ -198,17 +209,21 @@
         }
     }
 
-    /** MODULE: InputManager */
+    /** MODULE: InputManager (FIXED: Tracks mouse globally over window!) */
     class InputManager {
         constructor(canvas) {
             this.mouse = { x: 0, y: 0, isDown: false, clicked: false, rightClicked: false }; this.scrollDelta = 0;
-            canvas.addEventListener('mousemove', (e) => { this.mouse.x = e.clientX; this.mouse.y = e.clientY; });
+            
+            // Listen to Window so the mouse updates even when hovering over UI buttons
+            window.addEventListener('mousemove', (e) => { this.mouse.x = e.clientX; this.mouse.y = e.clientY; });
+            
+            // Only clicks on the ACTUAL CANVAS will attempt to place the turret
             canvas.addEventListener('mousedown', (e) => {
                 if (e.button === 0) { this.mouse.isDown = true; this.mouse.clicked = true; } else if (e.button === 2) { this.mouse.rightClicked = true; }
             });
             canvas.addEventListener('mouseup', (e) => { if (e.button === 0) this.mouse.isDown = false; });
             canvas.addEventListener('contextmenu', e => e.preventDefault());
-            canvas.addEventListener('wheel', (e) => { this.scrollDelta = Math.sign(e.deltaY); });
+            window.addEventListener('wheel', (e) => { this.scrollDelta = Math.sign(e.deltaY); }, {passive:true});
         }
         resetFrame() { this.mouse.clicked = false; this.mouse.rightClicked = false; this.scrollDelta = 0; }
     }
@@ -242,16 +257,14 @@
         draw(renderer) { renderer.drawCircle(this.x, this.y, this.radius, renderer.colors.projectile, null); }
     }
 
-    /** MODULE: Enemies (Now with Path Variety!) */
+    /** MODULE: Enemies */
     class Enemy {
         constructor(maxHp, typeColor, speedMult, radius) {
             this.hp = maxHp; this.maxHp = maxHp; this.progress = 1.0; 
             this.speed = 0.05 * speedMult; this.radius = radius; 
             this.x = 0; this.y = 0; this.hitTimer = 0; this.color = typeColor; this.reward = 10;
-            
-            // Randomize Pathing Style
             this.pathAngle = Math.random() * Math.PI * 2;
-            this.pathType = Math.floor(Math.random() * 4); // 0:CW, 1:CCW, 2:Straight, 3:Sine Wave
+            this.pathType = Math.floor(Math.random() * 4); 
         }
         update(dt, centerX, centerY, targetRadius) {
             if (this.hitTimer > 0) this.hitTimer -= dt;
@@ -262,9 +275,9 @@
             const dist = targetRadius + (startDist - targetRadius) * this.progress;
             
             let angle = this.pathAngle;
-            if (this.pathType === 0) angle += this.progress * Math.PI * 4; // Clockwise spiral
-            else if (this.pathType === 1) angle -= this.progress * Math.PI * 4; // Counter-Clockwise
-            else if (this.pathType === 3) angle += Math.sin(this.progress * Math.PI * 8) * 0.5; // Wavy path
+            if (this.pathType === 0) angle += this.progress * Math.PI * 4; 
+            else if (this.pathType === 1) angle -= this.progress * Math.PI * 4; 
+            else if (this.pathType === 3) angle += Math.sin(this.progress * Math.PI * 8) * 0.5; 
             
             this.x = centerX + Math.cos(angle) * dist; this.y = centerY + Math.sin(angle) * dist;
             return false;
@@ -281,14 +294,13 @@
     }
     class Boss extends Enemy {
         constructor(maxHp, color) {
-            super(maxHp * 25, color, 0.5, 26); // MASSIVE HP INCREASE, slow speed, huge radius
-            this.reward = 150; 
-            this.pathType = 2; // Bosses always walk in a terrifying straight line
+            super(maxHp * 25, color, 0.5, 26); 
+            this.reward = 150; this.pathType = 2; 
         }
         draw(renderer) {
             renderer.ctx.shadowBlur = 15; renderer.ctx.shadowColor = 'rgba(192, 57, 43, 0.7)'; renderer.ctx.shadowOffsetY = 5;
             let c = this.hitTimer > 0 ? renderer.colors.hitFlash : this.color;
-            const points = GeometrySystem.getRegularPolygon(this.x, this.y, 8, this.radius, this.progress * Math.PI); // Spinning Octagon
+            const points = GeometrySystem.getRegularPolygon(this.x, this.y, 8, this.radius, this.progress * Math.PI);
             renderer.drawPolygon(points, c, '#78281f', 3);
             renderer.ctx.shadowBlur = 0; renderer.ctx.shadowOffsetY = 0;
             
@@ -298,7 +310,7 @@
         }
     }
 
-    /** MODULE: Turrets (Base + 3 Variants) */
+    /** MODULE: Turrets */
     class Turret {
         constructor(x, y, radius, isSnapped, typeName) {
             this.x = x; this.y = y; this.radius = radius; this.angle = 0; this.cooldownTimer = 0; 
@@ -327,13 +339,9 @@
         }
         drawAuraAndRange(renderer, upgrades, color) {
             if (this.isSnapped) renderer.drawCircle(this.x, this.y, this.radius + 4, renderer.colors.nodeGlow, null);
-            // ONLY draw range if hovered!
-            if (this.isHovered) {
-                renderer.drawCircle(this.x, this.y, this.getCurrentRange(upgrades), 'rgba(46, 204, 113, 0.1)', renderer.colors.validOutline, 1, true);
-            }
+            if (this.isHovered) renderer.drawCircle(this.x, this.y, this.getCurrentRange(upgrades), 'rgba(46, 204, 113, 0.1)', renderer.colors.validOutline, 1, true);
         }
     }
-
     class PulseTurret extends Turret {
         constructor(x,y,r,s) { super(x,y,r,s, "Pulse (Circle)"); this.baseRange = r*2.5 + 80; this.baseDamage = Math.pow(this.scale,2)*10; this.baseFireRate = this.scale*0.4; }
         draw(renderer, upgrades) {
@@ -350,7 +358,6 @@
         draw(renderer, upgrades) {
             const color = this.isSnapped ? renderer.colors.turretSynergy : '#e74c3c';
             this.drawAuraAndRange(renderer, upgrades, color);
-            // Draw Triangle pointing at target
             const pts = GeometrySystem.getRegularPolygon(this.x, this.y, 3, this.radius, this.angle);
             renderer.drawPolygon(pts, 'white', color, 2);
         }
@@ -360,17 +367,17 @@
         draw(renderer, upgrades) {
             const color = this.isSnapped ? renderer.colors.turretSynergy : '#f39c12';
             this.drawAuraAndRange(renderer, upgrades, color);
-            // Draw Square pointing at target
             const pts = GeometrySystem.getRegularPolygon(this.x, this.y, 4, this.radius, this.angle + Math.PI/4);
             renderer.drawPolygon(pts, 'white', color, 2);
         }
     }
 
-    /** MODULE: PlacementSystem */
+    /** MODULE: PlacementSystem (NOW WITH TRUE SHAPE PREVIEW AND ADVANCED SNAPPING) */
     class PlacementSystem {
         constructor() {
             this.isPlacing = false; this.currentRadius = 25; this.minRadius = 15; this.maxRadius = 80;
             this.isValid = false; this.isSnapped = false; this.pendingType = 'Pulse'; this.pendingCost = 50;
+            this.previewX = 0; this.previewY = 0;
         }
         startPlacement(type, cost) { 
             this.isPlacing = true; this.pendingType = type; this.pendingCost = cost; 
@@ -387,9 +394,58 @@
             }
 
             let mx = input.mouse.x; let my = input.mouse.y; this.isSnapped = false;
-            for (let node of nodes) {
-                if (GeometrySystem.distSquared({x: mx, y: my}, node) < 625) { mx = node.x; my = node.y; this.isSnapped = true; break; }
+            let snapEnabled = document.getElementById('toggle-snap').checked;
+
+            if (snapEnabled) {
+                // 1. Grid Snapping
+                let gridSize = 20;
+                mx = Math.round(mx / gridSize) * gridSize;
+                my = Math.round(my / gridSize) * gridSize;
+
+                // 2. Shape Edge Snapping (tangent to other turrets)
+                for (let t of placedTurrets) {
+                    let dist = Math.sqrt(GeometrySystem.distSquared({x: mx, y: my}, t));
+                    let targetDist = t.radius + this.currentRadius;
+                    if (Math.abs(dist - targetDist) < 18) { // Snap Threshold
+                        let angle = Math.atan2(my - t.y, mx - t.x);
+                        mx = t.x + Math.cos(angle) * targetDist;
+                        my = t.y + Math.sin(angle) * targetDist;
+                        break;
+                    }
+                }
+
+                // 3. Perimeter Snapping (Inner tangent to polygon edge)
+                for (let i = 0; i < polygonPoints.length; i++) {
+                    let p1 = polygonPoints[i]; let p2 = polygonPoints[(i + 1) % polygonPoints.length];
+                    let l2 = GeometrySystem.distSquared(p1, p2);
+                    if (l2 === 0) continue;
+                    let t_proj = ((mx - p1.x) * (p2.x - p1.x) + (my - p1.y) * (p2.y - p1.y)) / l2;
+                    t_proj = Math.max(0, Math.min(1, t_proj));
+                    let projX = p1.x + t_proj * (p2.x - p1.x);
+                    let projY = p1.y + t_proj * (p2.y - p1.y);
+                    
+                    let distToEdge = Math.sqrt((mx - projX)**2 + (my - projY)**2);
+                    if (Math.abs(distToEdge - this.currentRadius) < 18) {
+                        let nx = mx - projX; let ny = my - projY;
+                        let nLen = Math.sqrt(nx*nx + ny*ny);
+                        if (nLen > 0) {
+                            mx = projX + (nx/nLen) * this.currentRadius;
+                            my = projY + (ny/nLen) * this.currentRadius;
+                        }
+                    }
+                }
             }
+
+            // 4. Geometry Node Synergy (+50% Buff) - Highest Snapping Priority
+            for (let node of nodes) {
+                if (GeometrySystem.distSquared({x: mx, y: my}, node) < 625) { 
+                    mx = node.x; my = node.y; this.isSnapped = true; break; 
+                }
+            }
+
+            // Save for exact rendering
+            this.previewX = mx; this.previewY = my;
+
             let insidePoly = GeometrySystem.isCircleInsidePolygon(mx, my, this.currentRadius, polygonPoints);
             let overlapping = false;
             for (let t of placedTurrets) {
@@ -402,24 +458,39 @@
                 if (this.pendingType === 'Pulse') return new PulseTurret(mx, my, this.currentRadius, this.isSnapped);
                 if (this.pendingType === 'Rapid') return new RapidTurret(mx, my, this.currentRadius, this.isSnapped);
                 if (this.pendingType === 'Sniper') return new SniperTurret(mx, my, this.currentRadius, this.isSnapped);
-            } return null;
+            } 
+            return null;
         }
+        
         drawPreview(renderer, input, upgrades) {
             if (!this.isPlacing) return;
-            let drawX = input.mouse.x; let drawY = input.mouse.y;
-            if (this.isSnapped) { drawX = this.isValid ? drawX : input.mouse.x; if (this.isValid) renderer.drawCircle(drawX, drawY, this.currentRadius + 6, renderer.colors.nodeGlow, null); }
+            let drawX = this.previewX; let drawY = this.previewY;
+            
+            if (this.isSnapped && this.isValid) {
+                renderer.drawCircle(drawX, drawY, this.currentRadius + 6, renderer.colors.nodeGlow, null);
+            }
+            
             const fill = this.isValid ? renderer.colors.valid : renderer.colors.invalid;
             const stroke = this.isValid ? renderer.colors.validOutline : renderer.colors.invalidOutline;
             
-            renderer.drawCircle(drawX, drawY, this.currentRadius, fill, stroke, 2);
+            // Draw exact shape of the pending turret type
+            if (this.pendingType === 'Pulse') {
+                renderer.drawCircle(drawX, drawY, this.currentRadius, fill, stroke, 2);
+            } else if (this.pendingType === 'Rapid') {
+                const pts = GeometrySystem.getRegularPolygon(drawX, drawY, 3, this.currentRadius, -Math.PI/2);
+                renderer.drawPolygon(pts, fill, stroke, 2);
+            } else if (this.pendingType === 'Sniper') {
+                const pts = GeometrySystem.getRegularPolygon(drawX, drawY, 4, this.currentRadius, Math.PI/4);
+                renderer.drawPolygon(pts, fill, stroke, 2);
+            }
             
-            // Dummy logic to calculate preview range dynamically based on pending type
-            let dummy;
-            if(this.pendingType==='Pulse') dummy = new PulseTurret(0,0,this.currentRadius,false);
-            if(this.pendingType==='Rapid') dummy = new RapidTurret(0,0,this.currentRadius,false);
-            if(this.pendingType==='Sniper') dummy = new SniperTurret(0,0,this.currentRadius,false);
+            // Dynamic Range Outline
+            let dummyRange = 0;
+            if(this.pendingType==='Pulse') dummyRange = (this.currentRadius*2.5 + 80) * upgrades.rangeMulti;
+            if(this.pendingType==='Rapid') dummyRange = (this.currentRadius*2.0 + 50) * upgrades.rangeMulti;
+            if(this.pendingType==='Sniper') dummyRange = (this.currentRadius*4.0 + 150) * upgrades.rangeMulti;
             
-            renderer.drawCircle(drawX, drawY, dummy.getCurrentRange(upgrades), null, stroke, 1, true);
+            renderer.drawCircle(drawX, drawY, dummyRange, null, stroke, 1, true);
         }
     }
 
@@ -430,20 +501,12 @@
             this.isBossWave = false; this.bossSpawned = false;
         }
         startWave() {
-            this.state = 'ACTIVE';
-            this.isBossWave = (this.wave % 5 === 0);
-            this.bossSpawned = false;
-            
-            // Zero Spawn Delay - Set timer to 0 to spawn instantly
-            this.spawnTimer = 0; 
+            this.state = 'ACTIVE'; this.isBossWave = (this.wave % 5 === 0); this.bossSpawned = false;
+            this.spawnTimer = 0; // Starts Instantly!
             this.spawnRate = Math.max(0.3, 2.0 - (this.wave * 0.15));
             
-            if (this.isBossWave) {
-                // Boss waves now also spawn normal enemies alongside the boss
-                this.enemiesToSpawn = 8 + (this.wave * 2); 
-            } else {
-                this.enemiesToSpawn = 5 + (this.wave * 3); 
-            }
+            if (this.isBossWave) { this.enemiesToSpawn = 8 + (this.wave * 2); } 
+            else { this.enemiesToSpawn = 5 + (this.wave * 3); }
             document.getElementById('btn-start-wave').style.display = 'none';
         }
         endWave(gameRef) {
@@ -460,20 +523,16 @@
             this.spawnTimer -= dt;
             
             if (this.spawnTimer <= 0 && this.enemiesToSpawn > 0) {
-                this.spawnTimer = this.spawnRate;
-                this.enemiesToSpawn--;
-                
+                this.spawnTimer = this.spawnRate; this.enemiesToSpawn--;
                 let baseHp = 15 + (this.wave * 15);
                 
                 if (this.isBossWave && !this.bossSpawned) {
-                    gameRef.enemies.push(new Boss(baseHp, gameRef.renderer.colors.boss));
-                    this.bossSpawned = true;
+                    gameRef.enemies.push(new Boss(baseHp, gameRef.renderer.colors.boss)); this.bossSpawned = true;
                 } else {
-                    // Random Enemy Types
                     let rand = Math.random();
-                    if (rand < 0.2) gameRef.enemies.push(new Enemy(baseHp*0.5, gameRef.renderer.colors.enemyFast, 1.8, 8)); // Fast/Weak
-                    else if (rand < 0.4) gameRef.enemies.push(new Enemy(baseHp*3, gameRef.renderer.colors.enemyTank, 0.5, 16)); // Tank
-                    else gameRef.enemies.push(new Enemy(baseHp, gameRef.renderer.colors.enemyBase, 1.0, 12)); // Standard
+                    if (rand < 0.2) gameRef.enemies.push(new Enemy(baseHp*0.5, gameRef.renderer.colors.enemyFast, 1.8, 8)); 
+                    else if (rand < 0.4) gameRef.enemies.push(new Enemy(baseHp*3, gameRef.renderer.colors.enemyTank, 0.5, 16)); 
+                    else gameRef.enemies.push(new Enemy(baseHp, gameRef.renderer.colors.enemyBase, 1.0, 12)); 
                 }
             }
             if (this.enemiesToSpawn === 0 && gameRef.enemies.length === 0) this.endWave(gameRef);
@@ -593,7 +652,6 @@
             this.renderer.drawPolygon(this.polygonPoints, this.renderer.colors.polyFill, this.renderer.colors.polyOutline, 3);
             for (let node of this.constructionNodes) this.renderer.drawNode(node.x, node.y);
             
-            // Draw nodes under turrets, but turrets above nodes
             for (let t of this.placedTurrets) t.draw(this.renderer, this.upgrades);
             for (let p of this.projectiles) p.draw(this.renderer);
             for (let e of this.enemies) e.draw(this.renderer);
