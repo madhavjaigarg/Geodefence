@@ -28,7 +28,7 @@
 
         #bottom-bar {
             position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
-            display: flex; gap: 15px; align-items: center;
+            display: flex; gap: 10px; align-items: center;
         }
 
         #info-panel {
@@ -53,6 +53,7 @@
 
         .btn-rapid { background: #e74c3c; box-shadow: 0 2px 4px rgba(231, 76, 60, 0.3); }
         .btn-sniper { background: #f39c12; box-shadow: 0 2px 4px rgba(243, 156, 18, 0.3); }
+        .btn-splash { background: #16a085; box-shadow: 0 2px 4px rgba(22, 160, 133, 0.3); }
         .btn-action { background: #e67e22; padding: 12px 24px; font-size: 15px;}
         .btn-shop { background: #8e44ad; padding: 12px 24px; font-size: 15px;}
 
@@ -72,7 +73,6 @@
         .shop-info strong { display: block; color: #2c3e50; font-size: 15px; }
         .shop-info span { font-size: 12px; color: #6c757d; }
 
-        /* Snap Toggle Checkbox Styling */
         .snap-toggle {
             display: flex; align-items: center; gap: 6px; font-weight: bold; font-size: 14px; 
             color: #2c3e50; cursor: pointer; background: #ecf0f1; padding: 8px 12px; 
@@ -89,7 +89,8 @@
             <div><span class="stat-label">Wave</span><span id="ui-wave">1</span></div>
             <div><span class="stat-label">Space Used</span><span id="ui-space">0%</span></div>
             <div><span class="stat-label">Money</span>$<span id="ui-money">300</span></div>
-            <div><span class="stat-label">Lives</span><span id="ui-lives">20</span></div>
+            <!-- THE BEAR -->
+            <div><span class="stat-label">Lives</span>🐻 <span id="ui-lives">20</span></div>
         </div>
         
         <div id="info-panel" class="panel">
@@ -103,14 +104,16 @@
         <div id="instruction">Scroll to Resize. <br>Snap to <span style="color:#8e44ad">Nodes</span> for +50% Damage!</div>
         
         <div id="bottom-bar" class="panel">
-            <!-- NEW SNAP TOGGLE -->
             <label class="snap-toggle" title="Snaps turrets perfectly to the grid, edges, and other shapes!">
                 <input type="checkbox" id="toggle-snap" checked> Snap
             </label>
 
+            <!-- Unlockable Turrets -->
             <button class="btn" id="btn-buy-pulse">Pulse (Circle) $50</button>
-            <button class="btn btn-rapid" id="btn-buy-rapid">Rapid (Triangle) $75</button>
-            <button class="btn btn-sniper" id="btn-buy-sniper">Sniper (Square) $120</button>
+            <button class="btn btn-rapid" id="btn-buy-rapid" style="display:none;">Rapid (Triangle) $75</button>
+            <button class="btn btn-sniper" id="btn-buy-sniper" style="display:none;">Sniper (Square) $120</button>
+            <button class="btn btn-splash" id="btn-buy-splash" style="display:none;">Splash (Pentagon) $200</button>
+            
             <div style="width:10px;"></div>
             <button class="btn btn-shop" id="btn-open-shop">Shop</button>
             <button class="btn btn-action" id="btn-start-wave">Start Wave 1</button>
@@ -176,7 +179,7 @@
                 valid: 'rgba(46, 204, 113, 0.3)', validOutline: '#27ae60',
                 invalid: 'rgba(231, 76, 60, 0.3)', invalidOutline: '#c0392b',
                 enemyBase: '#e67e22', enemyFast: '#f1c40f', enemyTank: '#34495e', boss: '#c0392b',
-                projectile: '#2c3e50', hitFlash: '#ffffff'
+                projectile: '#2c3e50', splashArea: 'rgba(231, 76, 60, 0.2)', hitFlash: '#ffffff'
             };
         }
         resize() {
@@ -207,21 +210,17 @@
                 if (isDashed) this.ctx.setLineDash([5, 5]); this.ctx.stroke(); this.ctx.setLineDash([]);
             }
         }
+        // User's specifically requested Node drawing function
         drawNode(x, y) {
-            // Draws a small circle for the synergy nodes using the colors you already defined
             this.drawCircle(x, y, 6, this.colors.node, 'white', 2);
         }
     }
 
-    /** MODULE: InputManager (FIXED: Tracks mouse globally over window!) */
+    /** MODULE: InputManager */
     class InputManager {
         constructor(canvas) {
             this.mouse = { x: 0, y: 0, isDown: false, clicked: false, rightClicked: false }; this.scrollDelta = 0;
-            
-            // Listen to Window so the mouse updates even when hovering over UI buttons
             window.addEventListener('mousemove', (e) => { this.mouse.x = e.clientX; this.mouse.y = e.clientY; });
-            
-            // Only clicks on the ACTUAL CANVAS will attempt to place the turret
             canvas.addEventListener('mousedown', (e) => {
                 if (e.button === 0) { this.mouse.isDown = true; this.mouse.clicked = true; } else if (e.button === 2) { this.mouse.rightClicked = true; }
             });
@@ -244,10 +243,11 @@
         buyRange(g) { if(g.money >= this.rangeCost){ g.money -= this.rangeCost; this.rangeLvl++; this.rangeMulti += 0.15; this.rangeCost = Math.floor(this.rangeCost*1.5); return true;} return false;}
     }
 
-    /** MODULE: Projectile */
+    /** MODULE: Projectile (NOW SUPPORTS SPLASH AoE) */
     class Projectile {
-        constructor(x, y, target, speed, damage) {
+        constructor(x, y, target, speed, damage, splashRadius = 0) {
             this.x = x; this.y = y; this.target = target; this.speed = speed; this.damage = damage; this.radius = 4;
+            this.splashRadius = splashRadius; // 0 = single target
             let angle = Math.atan2(target.y - y, target.x - x);
             this.vx = Math.cos(angle) * speed; this.vy = Math.sin(angle) * speed;
         }
@@ -258,7 +258,9 @@
             }
             this.x += this.vx * dt; this.y += this.vy * dt;
         }
-        draw(renderer) { renderer.drawCircle(this.x, this.y, this.radius, renderer.colors.projectile, null); }
+        draw(renderer) { 
+            renderer.drawCircle(this.x, this.y, this.radius + (this.splashRadius>0 ? 2 : 0), renderer.colors.projectile, null); 
+        }
     }
 
     /** MODULE: Enemies */
@@ -314,7 +316,7 @@
         }
     }
 
-    /** MODULE: Turrets */
+    /** MODULE: Turrets (Visual Rotation Stoped for tessellation!) */
     class Turret {
         constructor(x, y, radius, isSnapped, typeName) {
             this.x = x; this.y = y; this.radius = radius; this.angle = 0; this.cooldownTimer = 0; 
@@ -337,7 +339,8 @@
                 this.angle = Math.atan2(target.y - this.y, target.x - this.x);
                 if (this.cooldownTimer <= 0) {
                     this.cooldownTimer = this.getCurrentFireRate(upgrades);
-                    spawnProjectileCb(this.x, this.y, target, 1200, this.getCurrentDamage(upgrades));
+                    // Pass specific splash radius (0 by default)
+                    spawnProjectileCb(this.x, this.y, target, 1200, this.getCurrentDamage(upgrades), this.splashRadius || 0);
                 }
             }
         }
@@ -345,38 +348,67 @@
             if (this.isSnapped) renderer.drawCircle(this.x, this.y, this.radius + 4, renderer.colors.nodeGlow, null);
             if (this.isHovered) renderer.drawCircle(this.x, this.y, this.getCurrentRange(upgrades), 'rgba(46, 204, 113, 0.1)', renderer.colors.validOutline, 1, true);
         }
+        drawBarrel(renderer, color) {
+            // Rotating barrel line indicating where it is aiming
+            renderer.ctx.beginPath(); renderer.ctx.moveTo(this.x, this.y);
+            renderer.ctx.lineTo(this.x + Math.cos(this.angle) * this.radius, this.y + Math.sin(this.angle) * this.radius);
+            renderer.ctx.strokeStyle = color; renderer.ctx.lineWidth = 3; renderer.ctx.stroke();
+        }
     }
+    
     class PulseTurret extends Turret {
         constructor(x,y,r,s) { super(x,y,r,s, "Pulse (Circle)"); this.baseRange = r*2.5 + 80; this.baseDamage = Math.pow(this.scale,2)*10; this.baseFireRate = this.scale*0.4; }
         draw(renderer, upgrades) {
             const color = this.isSnapped ? renderer.colors.turretSynergy : '#3498db';
             this.drawAuraAndRange(renderer, upgrades, color);
             renderer.drawCircle(this.x, this.y, this.radius, 'white', color, 2);
-            renderer.ctx.beginPath(); renderer.ctx.moveTo(this.x, this.y);
-            renderer.ctx.lineTo(this.x + Math.cos(this.angle) * this.radius, this.y + Math.sin(this.angle) * this.radius);
-            renderer.ctx.strokeStyle = color; renderer.ctx.lineWidth = 3; renderer.ctx.stroke();
+            this.drawBarrel(renderer, color);
         }
     }
+    
     class RapidTurret extends Turret {
         constructor(x,y,r,s) { super(x,y,r,s, "Rapid (Triangle)"); this.baseRange = r*2.0 + 50; this.baseDamage = Math.pow(this.scale,1.5)*3; this.baseFireRate = this.scale*0.1; }
         draw(renderer, upgrades) {
             const color = this.isSnapped ? renderer.colors.turretSynergy : '#e74c3c';
             this.drawAuraAndRange(renderer, upgrades, color);
-            const pts = GeometrySystem.getRegularPolygon(this.x, this.y, 3, this.radius, this.angle);
+            // STATIC rotation (-Math.PI/2) for perfect tessellation packing!
+            const pts = GeometrySystem.getRegularPolygon(this.x, this.y, 3, this.radius, -Math.PI/2);
             renderer.drawPolygon(pts, 'white', color, 2);
+            this.drawBarrel(renderer, color);
         }
     }
+    
     class SniperTurret extends Turret {
         constructor(x,y,r,s) { super(x,y,r,s, "Sniper (Square)"); this.baseRange = r*4.0 + 150; this.baseDamage = Math.pow(this.scale,2.5)*40; this.baseFireRate = this.scale*1.5; }
         draw(renderer, upgrades) {
             const color = this.isSnapped ? renderer.colors.turretSynergy : '#f39c12';
             this.drawAuraAndRange(renderer, upgrades, color);
-            const pts = GeometrySystem.getRegularPolygon(this.x, this.y, 4, this.radius, this.angle + Math.PI/4);
+            // STATIC rotation (Math.PI/4) perfectly aligns square to X/Y grid!
+            const pts = GeometrySystem.getRegularPolygon(this.x, this.y, 4, this.radius, Math.PI/4);
             renderer.drawPolygon(pts, 'white', color, 2);
+            this.drawBarrel(renderer, color);
         }
     }
 
-    /** MODULE: PlacementSystem (NOW WITH TRUE SHAPE PREVIEW AND ADVANCED SNAPPING) */
+    class SplashTurret extends Turret {
+        constructor(x,y,r,s) { 
+            super(x,y,r,s, "Splash (Pentagon)"); 
+            this.baseRange = r*3.0 + 100; 
+            this.baseDamage = Math.pow(this.scale,2.5)*30; 
+            this.baseFireRate = this.scale*2.0; 
+            this.splashRadius = 100; // Large AoE Explosion
+        }
+        draw(renderer, upgrades) {
+            const color = this.isSnapped ? renderer.colors.turretSynergy : '#16a085';
+            this.drawAuraAndRange(renderer, upgrades, color);
+            // STATIC rotation
+            const pts = GeometrySystem.getRegularPolygon(this.x, this.y, 5, this.radius, -Math.PI/2);
+            renderer.drawPolygon(pts, 'white', color, 2);
+            this.drawBarrel(renderer, color);
+        }
+    }
+
+    /** MODULE: PlacementSystem */
     class PlacementSystem {
         constructor() {
             this.isPlacing = false; this.currentRadius = 25; this.minRadius = 15; this.maxRadius = 80;
@@ -401,60 +433,37 @@
             let snapEnabled = document.getElementById('toggle-snap').checked;
 
             if (snapEnabled) {
-                // 1. Grid Snapping
-                let gridSize = 20;
-                mx = Math.round(mx / gridSize) * gridSize;
-                my = Math.round(my / gridSize) * gridSize;
-
-                // 2. Shape Edge Snapping (tangent to other turrets)
+                let gridSize = 20; mx = Math.round(mx / gridSize) * gridSize; my = Math.round(my / gridSize) * gridSize;
                 for (let t of placedTurrets) {
                     let dist = Math.sqrt(GeometrySystem.distSquared({x: mx, y: my}, t));
                     let targetDist = t.radius + this.currentRadius;
-                    if (Math.abs(dist - targetDist) < 18) { // Snap Threshold
+                    if (Math.abs(dist - targetDist) < 18) { 
                         let angle = Math.atan2(my - t.y, mx - t.x);
-                        mx = t.x + Math.cos(angle) * targetDist;
-                        my = t.y + Math.sin(angle) * targetDist;
-                        break;
+                        mx = t.x + Math.cos(angle) * targetDist; my = t.y + Math.sin(angle) * targetDist; break;
                     }
                 }
-
-                // 3. Perimeter Snapping (Inner tangent to polygon edge)
                 for (let i = 0; i < polygonPoints.length; i++) {
                     let p1 = polygonPoints[i]; let p2 = polygonPoints[(i + 1) % polygonPoints.length];
-                    let l2 = GeometrySystem.distSquared(p1, p2);
-                    if (l2 === 0) continue;
+                    let l2 = GeometrySystem.distSquared(p1, p2); if (l2 === 0) continue;
                     let t_proj = ((mx - p1.x) * (p2.x - p1.x) + (my - p1.y) * (p2.y - p1.y)) / l2;
                     t_proj = Math.max(0, Math.min(1, t_proj));
-                    let projX = p1.x + t_proj * (p2.x - p1.x);
-                    let projY = p1.y + t_proj * (p2.y - p1.y);
-                    
+                    let projX = p1.x + t_proj * (p2.x - p1.x); let projY = p1.y + t_proj * (p2.y - p1.y);
                     let distToEdge = Math.sqrt((mx - projX)**2 + (my - projY)**2);
                     if (Math.abs(distToEdge - this.currentRadius) < 18) {
-                        let nx = mx - projX; let ny = my - projY;
-                        let nLen = Math.sqrt(nx*nx + ny*ny);
-                        if (nLen > 0) {
-                            mx = projX + (nx/nLen) * this.currentRadius;
-                            my = projY + (ny/nLen) * this.currentRadius;
-                        }
+                        let nx = mx - projX; let ny = my - projY; let nLen = Math.sqrt(nx*nx + ny*ny);
+                        if (nLen > 0) { mx = projX + (nx/nLen) * this.currentRadius; my = projY + (ny/nLen) * this.currentRadius; }
                     }
                 }
             }
 
-            // 4. Geometry Node Synergy (+50% Buff) - Highest Snapping Priority
             for (let node of nodes) {
-                if (GeometrySystem.distSquared({x: mx, y: my}, node) < 625) { 
-                    mx = node.x; my = node.y; this.isSnapped = true; break; 
-                }
+                if (GeometrySystem.distSquared({x: mx, y: my}, node) < 625) { mx = node.x; my = node.y; this.isSnapped = true; break; }
             }
-
-            // Save for exact rendering
             this.previewX = mx; this.previewY = my;
 
             let insidePoly = GeometrySystem.isCircleInsidePolygon(mx, my, this.currentRadius, polygonPoints);
             let overlapping = false;
-            for (let t of placedTurrets) {
-                if (GeometrySystem.doCirclesOverlap(mx, my, this.currentRadius, t.x, t.y, t.radius)) { overlapping = true; break; }
-            }
+            for (let t of placedTurrets) { if (GeometrySystem.doCirclesOverlap(mx, my, this.currentRadius, t.x, t.y, t.radius)) { overlapping = true; break; } }
             this.isValid = insidePoly && !overlapping;
 
             if (input.mouse.clicked && this.isValid) {
@@ -462,6 +471,7 @@
                 if (this.pendingType === 'Pulse') return new PulseTurret(mx, my, this.currentRadius, this.isSnapped);
                 if (this.pendingType === 'Rapid') return new RapidTurret(mx, my, this.currentRadius, this.isSnapped);
                 if (this.pendingType === 'Sniper') return new SniperTurret(mx, my, this.currentRadius, this.isSnapped);
+                if (this.pendingType === 'Splash') return new SplashTurret(mx, my, this.currentRadius, this.isSnapped);
             } 
             return null;
         }
@@ -470,14 +480,11 @@
             if (!this.isPlacing) return;
             let drawX = this.previewX; let drawY = this.previewY;
             
-            if (this.isSnapped && this.isValid) {
-                renderer.drawCircle(drawX, drawY, this.currentRadius + 6, renderer.colors.nodeGlow, null);
-            }
+            if (this.isSnapped && this.isValid) { renderer.drawCircle(drawX, drawY, this.currentRadius + 6, renderer.colors.nodeGlow, null); }
             
             const fill = this.isValid ? renderer.colors.valid : renderer.colors.invalid;
             const stroke = this.isValid ? renderer.colors.validOutline : renderer.colors.invalidOutline;
             
-            // Draw exact shape of the pending turret type
             if (this.pendingType === 'Pulse') {
                 renderer.drawCircle(drawX, drawY, this.currentRadius, fill, stroke, 2);
             } else if (this.pendingType === 'Rapid') {
@@ -486,19 +493,21 @@
             } else if (this.pendingType === 'Sniper') {
                 const pts = GeometrySystem.getRegularPolygon(drawX, drawY, 4, this.currentRadius, Math.PI/4);
                 renderer.drawPolygon(pts, fill, stroke, 2);
+            } else if (this.pendingType === 'Splash') {
+                const pts = GeometrySystem.getRegularPolygon(drawX, drawY, 5, this.currentRadius, -Math.PI/2);
+                renderer.drawPolygon(pts, fill, stroke, 2);
             }
             
-            // Dynamic Range Outline
             let dummyRange = 0;
             if(this.pendingType==='Pulse') dummyRange = (this.currentRadius*2.5 + 80) * upgrades.rangeMulti;
             if(this.pendingType==='Rapid') dummyRange = (this.currentRadius*2.0 + 50) * upgrades.rangeMulti;
             if(this.pendingType==='Sniper') dummyRange = (this.currentRadius*4.0 + 150) * upgrades.rangeMulti;
-            
+            if(this.pendingType==='Splash') dummyRange = (this.currentRadius*3.0 + 100) * upgrades.rangeMulti;
             renderer.drawCircle(drawX, drawY, dummyRange, null, stroke, 1, true);
         }
     }
 
-    /** MODULE: WaveManager */
+    /** MODULE: WaveManager (Handles Tower Progression & Unlocks) */
     class WaveManager {
         constructor() {
             this.wave = 1; this.state = 'WAITING'; this.enemiesToSpawn = 0; this.spawnTimer = 0;
@@ -506,7 +515,7 @@
         }
         startWave() {
             this.state = 'ACTIVE'; this.isBossWave = (this.wave % 5 === 0); this.bossSpawned = false;
-            this.spawnTimer = 0; // Starts Instantly!
+            this.spawnTimer = 0; 
             this.spawnRate = Math.max(0.3, 2.0 - (this.wave * 0.15));
             
             if (this.isBossWave) { this.enemiesToSpawn = 8 + (this.wave * 2); } 
@@ -514,7 +523,18 @@
             document.getElementById('btn-start-wave').style.display = 'none';
         }
         endWave(gameRef) {
-            this.state = 'WAITING'; this.wave++;
+            this.state = 'WAITING'; 
+            
+            // --- TOWER EVOLUTION AND TURRET UNLOCKS! ---
+            if (this.isBossWave) {
+                gameRef.towerSides++; // Expands the main board!
+                
+                if (this.wave === 5) document.getElementById('btn-buy-rapid').style.display = 'block';
+                if (this.wave === 10) document.getElementById('btn-buy-sniper').style.display = 'block';
+                if (this.wave === 15) document.getElementById('btn-buy-splash').style.display = 'block';
+            }
+            
+            this.wave++;
             gameRef.money += 50 + (this.wave * 15); gameRef.updateUI();
             
             let btn = document.getElementById('btn-start-wave');
@@ -547,14 +567,18 @@
     class Game {
         constructor() {
             this.renderer = new Renderer('gameCanvas'); this.input = new InputManager(this.renderer.canvas);
-            this.towerSides = 6; this.towerRadius = 250;
+            
+            // START AS A SQUARE (4 Sides)
+            this.towerSides = 4; 
+            this.towerRadius = 250;
+            
             this.polygonPoints = []; this.constructionNodes = [];
             this.placedTurrets = []; this.enemies = []; this.projectiles = [];
             
             this.placementSystem = new PlacementSystem(); this.waveManager = new WaveManager(); this.upgrades = new UpgradeSystem();
             this.money = 350; this.lives = 20; this.isPaused = false;
             
-            this.costs = { Pulse: 50, Rapid: 75, Sniper: 120 };
+            this.costs = { Pulse: 50, Rapid: 75, Sniper: 120, Splash: 200 };
 
             this.initUI(); this.lastTime = performance.now(); requestAnimationFrame((t) => this.loop(t));
         }
@@ -564,6 +588,8 @@
             document.getElementById('btn-buy-pulse').addEventListener('click', (e) => { e.stopPropagation(); if(this.money>=this.costs.Pulse) this.placementSystem.startPlacement('Pulse', this.costs.Pulse); });
             document.getElementById('btn-buy-rapid').addEventListener('click', (e) => { e.stopPropagation(); if(this.money>=this.costs.Rapid) this.placementSystem.startPlacement('Rapid', this.costs.Rapid); });
             document.getElementById('btn-buy-sniper').addEventListener('click', (e) => { e.stopPropagation(); if(this.money>=this.costs.Sniper) this.placementSystem.startPlacement('Sniper', this.costs.Sniper); });
+            document.getElementById('btn-buy-splash').addEventListener('click', (e) => { e.stopPropagation(); if(this.money>=this.costs.Splash) this.placementSystem.startPlacement('Splash', this.costs.Splash); });
+            
             document.getElementById('btn-start-wave').addEventListener('click', (e) => { e.stopPropagation(); this.waveManager.startWave(); });
             
             const shopModal = document.getElementById('shop-modal');
@@ -588,6 +614,7 @@
             document.getElementById('btn-buy-pulse').disabled = (this.money < this.costs.Pulse);
             document.getElementById('btn-buy-rapid').disabled = (this.money < this.costs.Rapid);
             document.getElementById('btn-buy-sniper').disabled = (this.money < this.costs.Sniper);
+            document.getElementById('btn-buy-splash').disabled = (this.money < this.costs.Splash);
             
             let totalPolyArea = 0.5 * this.towerSides * Math.pow(this.towerRadius, 2) * Math.sin((2 * Math.PI) / this.towerSides);
             let usedArea = this.placedTurrets.reduce((sum, t) => sum + Math.PI * Math.pow(t.radius, 2), 0);
@@ -601,8 +628,7 @@
                 for (let t of this.placedTurrets) {
                     t.isHovered = (GeometrySystem.distSquared(this.input.mouse, t) < Math.pow(t.radius, 2));
                     if (t.isHovered) {
-                        hoveredAny = true;
-                        infoPanel.style.display = 'flex';
+                        hoveredAny = true; infoPanel.style.display = 'flex';
                         document.getElementById('info-name').innerText = t.name + (t.isSnapped ? ' (Synergized)' : '');
                         document.getElementById('info-dmg').innerText = Math.round(t.getCurrentDamage(this.upgrades));
                         document.getElementById('info-fire').innerText = t.getCurrentFireRate(this.upgrades).toFixed(2) + 's';
@@ -615,9 +641,12 @@
         }
 
         update(dt) {
-            this.polygonPoints = GeometrySystem.getRegularPolygon(this.renderer.centerX, this.renderer.centerY, this.towerSides, this.towerRadius);
+            // Re-calculate polygon (In case it evolved!)
+            this.polygonPoints = GeometrySystem.getRegularPolygon(this.renderer.centerX, this.renderer.centerY, this.towerSides, this.towerRadius, 
+                                 (this.towerSides % 2 === 0 ? Math.PI/4 : -Math.PI/2)); // Rotate dynamically for best aesthetic
+            
             this.constructionNodes = [{x: this.renderer.centerX, y: this.renderer.centerY}];
-            const offset = -Math.PI / 2;
+            const offset = (this.towerSides % 2 === 0 ? Math.PI/4 : -Math.PI/2);
             for (let i = 0; i < this.towerSides; i++) {
                 const angle = offset + (i * 2 * Math.PI) / this.towerSides;
                 this.constructionNodes.push({ x: this.renderer.centerX + (this.towerRadius * 0.55) * Math.cos(angle), y: this.renderer.centerY + (this.towerRadius * 0.55) * Math.sin(angle) });
@@ -631,13 +660,31 @@
             this.waveManager.update(dt, this);
 
             for (let t of this.placedTurrets) {
-                t.update(dt, this.enemies, this.upgrades, (x, y, target, speed, dmg) => { this.projectiles.push(new Projectile(x, y, target, speed, dmg)); });
+                t.update(dt, this.enemies, this.upgrades, (x, y, target, speed, dmg, splash) => { this.projectiles.push(new Projectile(x, y, target, speed, dmg, splash)); });
             }
+            
+            // Collision and SPLASH DAMAGE logic
             for (let i = this.projectiles.length - 1; i >= 0; i--) {
                 let p = this.projectiles[i]; p.update(dt);
                 if (p.x < 0 || p.x > this.renderer.width || p.y < 0 || p.y > this.renderer.height) { this.projectiles.splice(i, 1); continue; }
                 for (let e of this.enemies) {
-                    if (GeometrySystem.distSquared(p, e) < (p.radius + e.radius)**2) { e.hp -= p.damage; e.hitTimer = 0.05; this.projectiles.splice(i, 1); break; }
+                    if (GeometrySystem.distSquared(p, e) < (p.radius + e.radius)**2) { 
+                        
+                        // Handle Splash/AoE
+                        if (p.splashRadius > 0) {
+                            for (let other of this.enemies) {
+                                if (GeometrySystem.distSquared(e, other) < p.splashRadius * p.splashRadius) {
+                                    other.hp -= p.damage; other.hitTimer = 0.05;
+                                }
+                            }
+                            // Quick visual explosion ring
+                            this.renderer.drawCircle(p.x, p.y, p.splashRadius, 'rgba(22, 160, 133, 0.4)', '#16a085', 2);
+                        } else {
+                            e.hp -= p.damage; e.hitTimer = 0.05; 
+                        }
+                        
+                        this.projectiles.splice(i, 1); break; 
+                    }
                 }
             }
             for (let i = this.enemies.length - 1; i >= 0; i--) {
