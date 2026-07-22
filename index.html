@@ -21,9 +21,16 @@
             box-shadow: 0 4px 15px rgba(0,0,0,0.08); backdrop-filter: blur(4px);
         }
 
+        /* Test Controls (Top Left) */
+        #test-controls {
+            position: absolute; top: 20px; left: 20px;
+            display: flex; gap: 8px; align-items: center; padding: 10px;
+        }
+        #test-controls select { padding: 5px; border-radius: 4px; border: 1px solid #bdc3c7; font-family: inherit; }
+
         #top-bar {
             position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
-            display: flex; gap: 40px; font-size: 18px; font-weight: 700; color: #2c3e50;
+            display: flex; gap: 40px; font-size: 18px; font-weight: 700; color: #2c3e50; align-items: center;
         }
 
         #bottom-bar {
@@ -31,22 +38,29 @@
             display: flex; gap: 10px; align-items: center;
         }
 
-        #info-panel {
-            position: absolute; top: 20px; right: 20px;
-            width: 200px; display: none; flex-direction: column; gap: 10px;
+        /* Hover Info Panels (Top Right) */
+        #info-panel, #enemy-info-panel {
+            position: absolute; right: 20px; width: 200px; display: none; flex-direction: column; gap: 10px;
         }
+        #info-panel { top: 20px; }
+        #enemy-info-panel { top: 180px; } /* Sits below turret panel if both are active */
+
         .info-row { display: flex; justify-content: space-between; font-size: 14px; font-weight: bold; color: #2c3e50;}
         .info-val { color: #8e44ad; }
+        .enemy-val { color: #e74c3c; }
 
         .stat-label { font-size: 11px; color: #6c757d; text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 2px; }
+
+        /* Health Bar Styles */
+        .health-wrapper { display: flex; align-items: center; gap: 10px; }
+        .health-bar-bg { width: 100px; height: 12px; background: #e9ecef; border-radius: 6px; overflow: hidden; border: 1px solid #ced4da;}
+        .health-bar-fill { height: 100%; background: #2ecc71; width: 100%; transition: width 0.3s, background 0.3s; }
 
         .btn {
             background: #3498db; color: white; border: none; padding: 10px 15px;
             font-family: 'Roboto', sans-serif; font-weight: bold; font-size: 13px;
-            border-radius: 6px; cursor: pointer; transition: all 0.2s;
-            box-shadow: 0 2px 4px rgba(52, 152, 219, 0.3);
+            border-radius: 6px; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 4px rgba(52, 152, 219, 0.3);
         }
-        
         .btn:hover { filter: brightness(1.1); transform: translateY(-2px); }
         .btn:active { transform: translateY(0); }
         .btn:disabled { background: #bdc3c7; cursor: not-allowed; transform: none; box-shadow: none; filter: none; }
@@ -85,20 +99,47 @@
 <body>
     <canvas id="gameCanvas"></canvas>
     <div id="ui-layer">
+
+        <!-- Testing Tools -->
+        <div id="test-controls" class="panel">
+            <span style="font-size:12px; font-weight:bold; color:#6c757d;">DEV:</span>
+            <select id="sel-skip-wave">
+                <option value="5">Wave 5 (Boss)</option>
+                <option value="10">Wave 10 (Boss)</option>
+                <option value="15">Wave 15 (Boss)</option>
+                <option value="20">Wave 20</option>
+            </select>
+            <button class="btn" id="btn-skip-wave" style="padding: 6px 12px; font-size:12px;">Skip</button>
+        </div>
+
         <div id="top-bar" class="panel">
             <div><span class="stat-label">Wave</span><span id="ui-wave">1</span></div>
             <div><span class="stat-label">Space Used</span><span id="ui-space">0%</span></div>
             <div><span class="stat-label">Money</span>$<span id="ui-money">300</span></div>
-            <!-- THE BEAR -->
-            <div><span class="stat-label">Lives</span>🐻 <span id="ui-lives">20</span></div>
+            <!-- Dynamic Health Bar -->
+            <div>
+                <span class="stat-label">Lives</span>
+                <div class="health-wrapper">
+                    <span id="ui-lives">20</span>
+                    <div class="health-bar-bg"><div id="ui-health-fill" class="health-bar-fill"></div></div>
+                </div>
+            </div>
         </div>
         
+        <!-- Hover Panels -->
         <div id="info-panel" class="panel">
             <div style="text-align: center; font-weight: bold; margin-bottom: 5px; color:#2c3e50;" id="info-name">Turret Stats</div>
             <div class="info-row">Damage: <span class="info-val" id="info-dmg">0</span></div>
             <div class="info-row">Fire Rate: <span class="info-val" id="info-fire">0s</span></div>
             <div class="info-row">Range: <span class="info-val" id="info-range">0</span></div>
             <div class="info-row">DPS: <span class="info-val" id="info-dps">0</span></div>
+        </div>
+
+        <div id="enemy-info-panel" class="panel">
+            <div style="text-align: center; font-weight: bold; margin-bottom: 5px; color:#c0392b;">Enemy Stats</div>
+            <div class="info-row">HP: <span class="enemy-val" id="enemy-info-hp">0</span></div>
+            <div class="info-row">Speed: <span class="enemy-val" id="enemy-info-speed">0</span></div>
+            <div class="info-row">Reward: <span class="enemy-val" id="enemy-info-reward">0</span></div>
         </div>
 
         <div id="instruction">Scroll to Resize. <br>Snap to <span style="color:#8e44ad">Nodes</span> for +50% Damage!</div>
@@ -210,10 +251,7 @@
                 if (isDashed) this.ctx.setLineDash([5, 5]); this.ctx.stroke(); this.ctx.setLineDash([]);
             }
         }
-        // User's specifically requested Node drawing function
-        drawNode(x, y) {
-            this.drawCircle(x, y, 6, this.colors.node, 'white', 2);
-        }
+        drawNode(x, y) { this.drawCircle(x, y, 6, this.colors.node, 'white', 2); }
     }
 
     /** MODULE: InputManager */
@@ -243,11 +281,11 @@
         buyRange(g) { if(g.money >= this.rangeCost){ g.money -= this.rangeCost; this.rangeLvl++; this.rangeMulti += 0.15; this.rangeCost = Math.floor(this.rangeCost*1.5); return true;} return false;}
     }
 
-    /** MODULE: Projectile (NOW SUPPORTS SPLASH AoE) */
+    /** MODULE: Projectile */
     class Projectile {
         constructor(x, y, target, speed, damage, splashRadius = 0) {
             this.x = x; this.y = y; this.target = target; this.speed = speed; this.damage = damage; this.radius = 4;
-            this.splashRadius = splashRadius; // 0 = single target
+            this.splashRadius = splashRadius; 
             let angle = Math.atan2(target.y - y, target.x - x);
             this.vx = Math.cos(angle) * speed; this.vy = Math.sin(angle) * speed;
         }
@@ -258,12 +296,10 @@
             }
             this.x += this.vx * dt; this.y += this.vy * dt;
         }
-        draw(renderer) { 
-            renderer.drawCircle(this.x, this.y, this.radius + (this.splashRadius>0 ? 2 : 0), renderer.colors.projectile, null); 
-        }
+        draw(renderer) { renderer.drawCircle(this.x, this.y, this.radius + (this.splashRadius>0 ? 2 : 0), renderer.colors.projectile, null); }
     }
 
-    /** MODULE: Enemies */
+    /** MODULE: Enemies (Now with Math Trails) */
     class Enemy {
         constructor(maxHp, typeColor, speedMult, radius) {
             this.hp = maxHp; this.maxHp = maxHp; this.progress = 1.0; 
@@ -271,6 +307,8 @@
             this.x = 0; this.y = 0; this.hitTimer = 0; this.color = typeColor; this.reward = 10;
             this.pathAngle = Math.random() * Math.PI * 2;
             this.pathType = Math.floor(Math.random() * 4); 
+            
+            this.trail = []; // Stores historical positions for the mathematical line trail
         }
         update(dt, centerX, centerY, targetRadius) {
             if (this.hitTimer > 0) this.hitTimer -= dt;
@@ -286,9 +324,26 @@
             else if (this.pathType === 3) angle += Math.sin(this.progress * Math.PI * 8) * 0.5; 
             
             this.x = centerX + Math.cos(angle) * dist; this.y = centerY + Math.sin(angle) * dist;
+            
+            // Record Trail
+            this.trail.push({x: this.x, y: this.y});
+            if (this.trail.length > 35) this.trail.shift(); // Keep trail length limited
+            
             return false;
         }
         draw(renderer) {
+            // Draw Math Trail First
+            if (this.trail.length > 1) {
+                renderer.ctx.beginPath();
+                renderer.ctx.moveTo(this.trail[0].x, this.trail[0].y);
+                for (let i = 1; i < this.trail.length; i++) renderer.ctx.lineTo(this.trail[i].x, this.trail[i].y);
+                renderer.ctx.strokeStyle = this.color;
+                renderer.ctx.globalAlpha = 0.4;
+                renderer.ctx.lineWidth = 2;
+                renderer.ctx.stroke();
+                renderer.ctx.globalAlpha = 1.0;
+            }
+
             renderer.ctx.shadowBlur = 4; renderer.ctx.shadowColor = 'rgba(0,0,0,0.5)'; renderer.ctx.shadowOffsetY = 2;
             let c = this.hitTimer > 0 ? renderer.colors.hitFlash : this.color;
             renderer.drawCircle(this.x, this.y, this.radius, c, '#d35400', 2);
@@ -304,6 +359,15 @@
             this.reward = 150; this.pathType = 2; 
         }
         draw(renderer) {
+            // Boss Math Trail
+            if (this.trail.length > 1) {
+                renderer.ctx.beginPath();
+                renderer.ctx.moveTo(this.trail[0].x, this.trail[0].y);
+                for (let i = 1; i < this.trail.length; i++) renderer.ctx.lineTo(this.trail[i].x, this.trail[i].y);
+                renderer.ctx.strokeStyle = this.color; renderer.ctx.globalAlpha = 0.5; renderer.ctx.lineWidth = 4;
+                renderer.ctx.stroke(); renderer.ctx.globalAlpha = 1.0;
+            }
+
             renderer.ctx.shadowBlur = 15; renderer.ctx.shadowColor = 'rgba(192, 57, 43, 0.7)'; renderer.ctx.shadowOffsetY = 5;
             let c = this.hitTimer > 0 ? renderer.colors.hitFlash : this.color;
             const points = GeometrySystem.getRegularPolygon(this.x, this.y, 8, this.radius, this.progress * Math.PI);
@@ -316,10 +380,10 @@
         }
     }
 
-    /** MODULE: Turrets (Visual Rotation Stoped for tessellation!) */
+    /** MODULE: Turrets (NO BARRELS, PERFECT TESSELLATION) */
     class Turret {
         constructor(x, y, radius, isSnapped, typeName) {
-            this.x = x; this.y = y; this.radius = radius; this.angle = 0; this.cooldownTimer = 0; 
+            this.x = x; this.y = y; this.radius = radius; this.cooldownTimer = 0; 
             this.isSnapped = isSnapped; this.isHovered = false; this.name = typeName;
             this.scale = radius / 15; 
         }
@@ -335,76 +399,49 @@
                 let distSq = GeometrySystem.distSquared(this, e);
                 if (distSq <= minDt) { minDt = distSq; target = e; }
             }
-            if (target) {
-                this.angle = Math.atan2(target.y - this.y, target.x - this.x);
-                if (this.cooldownTimer <= 0) {
-                    this.cooldownTimer = this.getCurrentFireRate(upgrades);
-                    // Pass specific splash radius (0 by default)
-                    spawnProjectileCb(this.x, this.y, target, 1200, this.getCurrentDamage(upgrades), this.splashRadius || 0);
-                }
+            if (target && this.cooldownTimer <= 0) {
+                this.cooldownTimer = this.getCurrentFireRate(upgrades);
+                spawnProjectileCb(this.x, this.y, target, 1200, this.getCurrentDamage(upgrades), this.splashRadius || 0);
             }
         }
         drawAuraAndRange(renderer, upgrades, color) {
             if (this.isSnapped) renderer.drawCircle(this.x, this.y, this.radius + 4, renderer.colors.nodeGlow, null);
             if (this.isHovered) renderer.drawCircle(this.x, this.y, this.getCurrentRange(upgrades), 'rgba(46, 204, 113, 0.1)', renderer.colors.validOutline, 1, true);
         }
-        drawBarrel(renderer, color) {
-            // Rotating barrel line indicating where it is aiming
-            renderer.ctx.beginPath(); renderer.ctx.moveTo(this.x, this.y);
-            renderer.ctx.lineTo(this.x + Math.cos(this.angle) * this.radius, this.y + Math.sin(this.angle) * this.radius);
-            renderer.ctx.strokeStyle = color; renderer.ctx.lineWidth = 3; renderer.ctx.stroke();
-        }
     }
-    
     class PulseTurret extends Turret {
         constructor(x,y,r,s) { super(x,y,r,s, "Pulse (Circle)"); this.baseRange = r*2.5 + 80; this.baseDamage = Math.pow(this.scale,2)*10; this.baseFireRate = this.scale*0.4; }
         draw(renderer, upgrades) {
             const color = this.isSnapped ? renderer.colors.turretSynergy : '#3498db';
             this.drawAuraAndRange(renderer, upgrades, color);
             renderer.drawCircle(this.x, this.y, this.radius, 'white', color, 2);
-            this.drawBarrel(renderer, color);
         }
     }
-    
     class RapidTurret extends Turret {
         constructor(x,y,r,s) { super(x,y,r,s, "Rapid (Triangle)"); this.baseRange = r*2.0 + 50; this.baseDamage = Math.pow(this.scale,1.5)*3; this.baseFireRate = this.scale*0.1; }
         draw(renderer, upgrades) {
             const color = this.isSnapped ? renderer.colors.turretSynergy : '#e74c3c';
             this.drawAuraAndRange(renderer, upgrades, color);
-            // STATIC rotation (-Math.PI/2) for perfect tessellation packing!
             const pts = GeometrySystem.getRegularPolygon(this.x, this.y, 3, this.radius, -Math.PI/2);
             renderer.drawPolygon(pts, 'white', color, 2);
-            this.drawBarrel(renderer, color);
         }
     }
-    
     class SniperTurret extends Turret {
         constructor(x,y,r,s) { super(x,y,r,s, "Sniper (Square)"); this.baseRange = r*4.0 + 150; this.baseDamage = Math.pow(this.scale,2.5)*40; this.baseFireRate = this.scale*1.5; }
         draw(renderer, upgrades) {
             const color = this.isSnapped ? renderer.colors.turretSynergy : '#f39c12';
             this.drawAuraAndRange(renderer, upgrades, color);
-            // STATIC rotation (Math.PI/4) perfectly aligns square to X/Y grid!
             const pts = GeometrySystem.getRegularPolygon(this.x, this.y, 4, this.radius, Math.PI/4);
             renderer.drawPolygon(pts, 'white', color, 2);
-            this.drawBarrel(renderer, color);
         }
     }
-
     class SplashTurret extends Turret {
-        constructor(x,y,r,s) { 
-            super(x,y,r,s, "Splash (Pentagon)"); 
-            this.baseRange = r*3.0 + 100; 
-            this.baseDamage = Math.pow(this.scale,2.5)*30; 
-            this.baseFireRate = this.scale*2.0; 
-            this.splashRadius = 100; // Large AoE Explosion
-        }
+        constructor(x,y,r,s) { super(x,y,r,s, "Splash (Pentagon)"); this.baseRange = r*3.0 + 100; this.baseDamage = Math.pow(this.scale,2.5)*30; this.baseFireRate = this.scale*2.0; this.splashRadius = 100; }
         draw(renderer, upgrades) {
             const color = this.isSnapped ? renderer.colors.turretSynergy : '#16a085';
             this.drawAuraAndRange(renderer, upgrades, color);
-            // STATIC rotation
             const pts = GeometrySystem.getRegularPolygon(this.x, this.y, 5, this.radius, -Math.PI/2);
             renderer.drawPolygon(pts, 'white', color, 2);
-            this.drawBarrel(renderer, color);
         }
     }
 
@@ -479,24 +516,14 @@
         drawPreview(renderer, input, upgrades) {
             if (!this.isPlacing) return;
             let drawX = this.previewX; let drawY = this.previewY;
-            
             if (this.isSnapped && this.isValid) { renderer.drawCircle(drawX, drawY, this.currentRadius + 6, renderer.colors.nodeGlow, null); }
-            
             const fill = this.isValid ? renderer.colors.valid : renderer.colors.invalid;
             const stroke = this.isValid ? renderer.colors.validOutline : renderer.colors.invalidOutline;
             
-            if (this.pendingType === 'Pulse') {
-                renderer.drawCircle(drawX, drawY, this.currentRadius, fill, stroke, 2);
-            } else if (this.pendingType === 'Rapid') {
-                const pts = GeometrySystem.getRegularPolygon(drawX, drawY, 3, this.currentRadius, -Math.PI/2);
-                renderer.drawPolygon(pts, fill, stroke, 2);
-            } else if (this.pendingType === 'Sniper') {
-                const pts = GeometrySystem.getRegularPolygon(drawX, drawY, 4, this.currentRadius, Math.PI/4);
-                renderer.drawPolygon(pts, fill, stroke, 2);
-            } else if (this.pendingType === 'Splash') {
-                const pts = GeometrySystem.getRegularPolygon(drawX, drawY, 5, this.currentRadius, -Math.PI/2);
-                renderer.drawPolygon(pts, fill, stroke, 2);
-            }
+            if (this.pendingType === 'Pulse') { renderer.drawCircle(drawX, drawY, this.currentRadius, fill, stroke, 2); } 
+            else if (this.pendingType === 'Rapid') { const pts = GeometrySystem.getRegularPolygon(drawX, drawY, 3, this.currentRadius, -Math.PI/2); renderer.drawPolygon(pts, fill, stroke, 2); } 
+            else if (this.pendingType === 'Sniper') { const pts = GeometrySystem.getRegularPolygon(drawX, drawY, 4, this.currentRadius, Math.PI/4); renderer.drawPolygon(pts, fill, stroke, 2); } 
+            else if (this.pendingType === 'Splash') { const pts = GeometrySystem.getRegularPolygon(drawX, drawY, 5, this.currentRadius, -Math.PI/2); renderer.drawPolygon(pts, fill, stroke, 2); }
             
             let dummyRange = 0;
             if(this.pendingType==='Pulse') dummyRange = (this.currentRadius*2.5 + 80) * upgrades.rangeMulti;
@@ -507,7 +534,7 @@
         }
     }
 
-    /** MODULE: WaveManager (Handles Tower Progression & Unlocks) */
+    /** MODULE: WaveManager */
     class WaveManager {
         constructor() {
             this.wave = 1; this.state = 'WAITING'; this.enemiesToSpawn = 0; this.spawnTimer = 0;
@@ -524,14 +551,11 @@
         }
         endWave(gameRef) {
             this.state = 'WAITING'; 
-            
-            // --- TOWER EVOLUTION AND TURRET UNLOCKS! ---
             if (this.isBossWave) {
-                gameRef.towerSides++; // Expands the main board!
-                
-                if (this.wave === 5) document.getElementById('btn-buy-rapid').style.display = 'block';
-                if (this.wave === 10) document.getElementById('btn-buy-sniper').style.display = 'block';
-                if (this.wave === 15) document.getElementById('btn-buy-splash').style.display = 'block';
+                gameRef.towerSides++; 
+                if (this.wave >= 5) document.getElementById('btn-buy-rapid').style.display = 'block';
+                if (this.wave >= 10) document.getElementById('btn-buy-sniper').style.display = 'block';
+                if (this.wave >= 15) document.getElementById('btn-buy-splash').style.display = 'block';
             }
             
             this.wave++;
@@ -568,15 +592,15 @@
         constructor() {
             this.renderer = new Renderer('gameCanvas'); this.input = new InputManager(this.renderer.canvas);
             
-            // START AS A SQUARE (4 Sides)
-            this.towerSides = 4; 
-            this.towerRadius = 250;
+            this.lastCenterX = this.renderer.centerX;
+            this.lastCenterY = this.renderer.centerY;
             
+            this.towerSides = 4; this.towerRadius = 250;
             this.polygonPoints = []; this.constructionNodes = [];
             this.placedTurrets = []; this.enemies = []; this.projectiles = [];
             
             this.placementSystem = new PlacementSystem(); this.waveManager = new WaveManager(); this.upgrades = new UpgradeSystem();
-            this.money = 350; this.lives = 20; this.isPaused = false;
+            this.maxLives = 20; this.lives = 20; this.money = 350; this.isPaused = false;
             
             this.costs = { Pulse: 50, Rapid: 75, Sniper: 120, Splash: 200 };
 
@@ -599,6 +623,28 @@
             document.getElementById('btn-upg-dmg').addEventListener('click', () => { if(this.upgrades.buyDamage(this)){ this.updateUI(); this.updateShopUI(); }});
             document.getElementById('btn-upg-fire').addEventListener('click', () => { if(this.upgrades.buyFireRate(this)){ this.updateUI(); this.updateShopUI(); }});
             document.getElementById('btn-upg-range').addEventListener('click', () => { if(this.upgrades.buyRange(this)){ this.updateUI(); this.updateShopUI(); }});
+            
+            // Testing / Developer Feature: Skip Wave
+            document.getElementById('btn-skip-wave').addEventListener('click', () => {
+                let target = parseInt(document.getElementById('sel-skip-wave').value);
+                this.waveManager.wave = target;
+                this.waveManager.state = 'WAITING';
+                this.enemies = []; this.projectiles = []; // Clear board
+                
+                // Set correct tower progression based on target wave
+                this.towerSides = 4 + Math.floor((target - 1) / 5);
+                
+                // Unlock turrets based on wave skipped to
+                if (target >= 5) document.getElementById('btn-buy-rapid').style.display = 'block';
+                if (target >= 10) document.getElementById('btn-buy-sniper').style.display = 'block';
+                if (target >= 15) document.getElementById('btn-buy-splash').style.display = 'block';
+
+                let btn = document.getElementById('btn-start-wave');
+                btn.innerText = (target % 5 === 0) ? "Start BOSS Wave " + target : "Start Wave " + target;
+                btn.style.background = (target % 5 === 0) ? '#c0392b' : '#e67e22'; 
+                btn.style.display = 'block';
+                this.updateUI();
+            });
         }
 
         updateShopUI() {
@@ -611,6 +657,15 @@
             document.getElementById('ui-wave').innerText = this.waveManager.wave;
             document.getElementById('ui-money').innerText = this.money;
             document.getElementById('ui-lives').innerText = this.lives;
+            
+            // Update Health Bar CSS Width and color
+            let fill = document.getElementById('ui-health-fill');
+            let hpPct = Math.max(0, this.lives / this.maxLives);
+            fill.style.width = (hpPct * 100) + '%';
+            if (hpPct > 0.5) fill.style.background = '#2ecc71';
+            else if (hpPct > 0.25) fill.style.background = '#f1c40f';
+            else fill.style.background = '#e74c3c';
+
             document.getElementById('btn-buy-pulse').disabled = (this.money < this.costs.Pulse);
             document.getElementById('btn-buy-rapid').disabled = (this.money < this.costs.Rapid);
             document.getElementById('btn-buy-sniper').disabled = (this.money < this.costs.Sniper);
@@ -622,13 +677,16 @@
         }
         
         handleHoverLogic() {
-            let infoPanel = document.getElementById('info-panel');
-            let hoveredAny = false;
+            let turretPanel = document.getElementById('info-panel');
+            let enemyPanel = document.getElementById('enemy-info-panel');
+            
+            // Turret Hover Checking
+            let hoveredTurret = false;
             if (!this.placementSystem.isPlacing) {
                 for (let t of this.placedTurrets) {
                     t.isHovered = (GeometrySystem.distSquared(this.input.mouse, t) < Math.pow(t.radius, 2));
                     if (t.isHovered) {
-                        hoveredAny = true; infoPanel.style.display = 'flex';
+                        hoveredTurret = true; turretPanel.style.display = 'flex';
                         document.getElementById('info-name').innerText = t.name + (t.isSnapped ? ' (Synergized)' : '');
                         document.getElementById('info-dmg').innerText = Math.round(t.getCurrentDamage(this.upgrades));
                         document.getElementById('info-fire').innerText = t.getCurrentFireRate(this.upgrades).toFixed(2) + 's';
@@ -637,13 +695,37 @@
                     }
                 }
             }
-            if (!hoveredAny) infoPanel.style.display = 'none';
+            if (!hoveredTurret) turretPanel.style.display = 'none';
+
+            // Enemy Hover Checking
+            let hoveredEnemy = false;
+            for (let e of this.enemies) {
+                if (GeometrySystem.distSquared(this.input.mouse, e) < Math.pow(e.radius * 1.5, 2)) { // Slightly larger hover box for fast enemies
+                    hoveredEnemy = true; enemyPanel.style.display = 'flex';
+                    document.getElementById('enemy-info-hp').innerText = Math.round(e.hp) + " / " + e.maxHp;
+                    // Format speed nicely (0.05 -> 5.0)
+                    document.getElementById('enemy-info-speed').innerText = (e.speed * 100).toFixed(1);
+                    document.getElementById('enemy-info-reward').innerText = "$" + e.reward;
+                    break; 
+                }
+            }
+            if (!hoveredEnemy) enemyPanel.style.display = 'none';
         }
 
         update(dt) {
-            // Re-calculate polygon (In case it evolved!)
+            // Check for Window Resizing to keep turrets aligned inside the polygon!
+            let dx = this.renderer.centerX - this.lastCenterX;
+            let dy = this.renderer.centerY - this.lastCenterY;
+            if (dx !== 0 || dy !== 0) {
+                for (let t of this.placedTurrets) { t.x += dx; t.y += dy; }
+                for (let p of this.projectiles) { p.x += dx; p.y += dy; }
+                for (let e of this.enemies) { for (let h of e.trail) { h.x += dx; h.y += dy; } } // Shift enemy trails
+                this.lastCenterX = this.renderer.centerX;
+                this.lastCenterY = this.renderer.centerY;
+            }
+
             this.polygonPoints = GeometrySystem.getRegularPolygon(this.renderer.centerX, this.renderer.centerY, this.towerSides, this.towerRadius, 
-                                 (this.towerSides % 2 === 0 ? Math.PI/4 : -Math.PI/2)); // Rotate dynamically for best aesthetic
+                                 (this.towerSides % 2 === 0 ? Math.PI/4 : -Math.PI/2)); 
             
             this.constructionNodes = [{x: this.renderer.centerX, y: this.renderer.centerY}];
             const offset = (this.towerSides % 2 === 0 ? Math.PI/4 : -Math.PI/2);
@@ -663,26 +745,21 @@
                 t.update(dt, this.enemies, this.upgrades, (x, y, target, speed, dmg, splash) => { this.projectiles.push(new Projectile(x, y, target, speed, dmg, splash)); });
             }
             
-            // Collision and SPLASH DAMAGE logic
             for (let i = this.projectiles.length - 1; i >= 0; i--) {
                 let p = this.projectiles[i]; p.update(dt);
                 if (p.x < 0 || p.x > this.renderer.width || p.y < 0 || p.y > this.renderer.height) { this.projectiles.splice(i, 1); continue; }
                 for (let e of this.enemies) {
                     if (GeometrySystem.distSquared(p, e) < (p.radius + e.radius)**2) { 
-                        
-                        // Handle Splash/AoE
                         if (p.splashRadius > 0) {
                             for (let other of this.enemies) {
                                 if (GeometrySystem.distSquared(e, other) < p.splashRadius * p.splashRadius) {
                                     other.hp -= p.damage; other.hitTimer = 0.05;
                                 }
                             }
-                            // Quick visual explosion ring
                             this.renderer.drawCircle(p.x, p.y, p.splashRadius, 'rgba(22, 160, 133, 0.4)', '#16a085', 2);
                         } else {
                             e.hp -= p.damage; e.hitTimer = 0.05; 
                         }
-                        
                         this.projectiles.splice(i, 1); break; 
                     }
                 }
