@@ -205,6 +205,45 @@
             } return true;
         }
         static doCirclesOverlap(x1, y1, r1, x2, y2, r2) { return this.distSquared({x: x1, y: y1}, {x: x2, y: y2}) < (r1 + r2)**2; }
+
+        static doPolygonsOverlap(polyA, polyB) {
+            const polygons = [polyA, polyB];
+            for (let i = 0; i < polygons.length; i++) {
+                const poly = polygons[i];
+                for (let j = 0; j < poly.length; j++) {
+                    const p1 = poly[j];
+                    const p2 = poly[(j + 1) % poly.length];
+                    const axis = { x: p2.y - p1.y, y: p1.x - p2.x };
+
+                    let minA = Infinity, maxA = -Infinity;
+                    for (const p of polyA) {
+                        const projected = (axis.x * p.x) + (axis.y * p.y);
+                        minA = Math.min(minA, projected);
+                        maxA = Math.max(maxA, projected);
+                    }
+
+                    let minB = Infinity, maxB = -Infinity;
+                    for (const p of polyB) {
+                        const projected = (axis.x * p.x) + (axis.y * p.y);
+                        minB = Math.min(minB, projected);
+                        maxB = Math.max(maxB, projected);
+                    }
+
+                    if (maxA <= minB || maxB <= minA) return false;
+                }
+            }
+            return true;
+        }
+
+        static doCirclePolygonOverlap(circleX, circleY, circleRadius, polyPoints) {
+            for (let i = 0; i < polyPoints.length; i++) {
+                const p1 = polyPoints[i];
+                const p2 = polyPoints[(i + 1) % polyPoints.length];
+                const distSq = this.distToSegmentSquared({ x: circleX, y: circleY }, p1, p2);
+                if (distSq < circleRadius ** 2) return true;
+            }
+            return false;
+        }
     }
 
     /** MODULE: Renderer */
@@ -405,7 +444,7 @@
             }
         }
         drawAuraAndRange(renderer, upgrades, color) {
-            if (this.isSnapped) renderer.drawCircle(this.x, this.y, this.radius + 4, renderer.colors.nodeGlow, null);
+            //if (this.isSnapped) renderer.drawCircle(this.x, this.y, this.radius + 4, renderer.colors.nodeGlow, null);
             if (this.isHovered) renderer.drawCircle(this.x, this.y, this.getCurrentRange(upgrades), 'rgba(46, 204, 113, 0.1)', renderer.colors.validOutline, 1, true);
         }
     }
@@ -498,9 +537,40 @@
             }
             this.previewX = mx; this.previewY = my;
 
+            // 1. Generate the exact points for the shape the player is currently holding
+            let pendingPoints = this.pendingType !== 'Pulse' ? GeometrySystem.getRegularPolygon(mx, my, this.sides, this.currentRadius, this.angle) : null; 
+
             let insidePoly = GeometrySystem.isCircleInsidePolygon(mx, my, this.currentRadius, polygonPoints);
             let overlapping = false;
-            for (let t of placedTurrets) { if (GeometrySystem.doCirclesOverlap(mx, my, this.currentRadius, t.x, t.y, t.radius)) { overlapping = true; break; } }
+
+            for (let t of placedTurrets) { 
+                // Broad Phase: Do the bounding circles touch?
+                if (GeometrySystem.doCirclesOverlap(mx, my, this.currentRadius, t.x, t.y, t.radius)) { 
+                    
+                    const pendingIsPoly = (this.pendingType !== 'Pulse'); 
+                    const placedIsPoly = (t.type !== 'Pulse' && t.points); 
+
+                    if (pendingIsPoly && placedIsPoly) {
+                        // Both Polygons
+                        if (GeometrySystem.doPolygonsOverlap(pendingPoints, t.points)) { overlapping = true; break; }
+                    } 
+                    else if (!pendingIsPoly && !placedIsPoly) {
+                        // Both Circles (CirclesOverlap already confirmed it)
+                        overlapping = true; break; 
+                    } 
+                    else {
+                        // One Circle, One Polygon
+                        const polyPts = pendingIsPoly ? pendingPoints : t.points;
+                        const circleX = pendingIsPoly ? t.x : mx;
+                        const circleY = pendingIsPoly ? t.y : my;
+                        const circleR = pendingIsPoly ? t.radius : this.currentRadius;
+
+                        if (GeometrySystem.doCirclePolygonOverlap(circleX, circleY, circleR, polyPts)) {
+                            overlapping = true; break;
+                        }
+                    }
+                } 
+            }
             this.isValid = insidePoly && !overlapping;
 
             if (input.mouse.clicked && this.isValid) {
@@ -516,9 +586,8 @@
         drawPreview(renderer, input, upgrades) {
             if (!this.isPlacing) return;
             let drawX = this.previewX; let drawY = this.previewY;
-            if (this.isSnapped && this.isValid) { renderer.drawCircle(drawX, drawY, this.currentRadius + 6, renderer.colors.nodeGlow, null); }
             const fill = this.isValid ? renderer.colors.valid : renderer.colors.invalid;
-            const stroke = this.isValid ? renderer.colors.validOutline : renderer.colors.invalidOutline;
+            const stroke = this.isValid ? (this.isSnapped ? renderer.colors.nodeGlow : renderer.colors.validOutline) : renderer.colors.invalidOutline;
             
             if (this.pendingType === 'Pulse') { renderer.drawCircle(drawX, drawY, this.currentRadius, fill, stroke, 2); } 
             else if (this.pendingType === 'Rapid') { const pts = GeometrySystem.getRegularPolygon(drawX, drawY, 3, this.currentRadius, -Math.PI/2); renderer.drawPolygon(pts, fill, stroke, 2); } 
