@@ -419,11 +419,12 @@
         }
     }
 
-    /** MODULE: Turrets (NO BARRELS, PERFECT TESSELLATION) */
+    /* MODULE: Turrets (NO BARRELS, PERFECT TESSELLATION) */
     class Turret {
-        constructor(x, y, radius, isSnapped, typeName) {
+        constructor(x, y, radius, isSnapped, type, points = null) {
             this.x = x; this.y = y; this.radius = radius; this.cooldownTimer = 0; 
-            this.isSnapped = isSnapped; this.isHovered = false; this.name = typeName;
+            this.isSnapped = isSnapped; this.isHovered = false; this.type = type; 
+            this.points = points ? points.map(p => ({x: p.x, y: p.y})) : null;
             this.scale = radius / 15; 
         }
         getCurrentRange(upgrades) { return this.baseRange * upgrades.rangeMulti; }
@@ -449,7 +450,7 @@
         }
     }
     class PulseTurret extends Turret {
-        constructor(x,y,r,s) { super(x,y,r,s, "Pulse (Circle)"); this.baseRange = r*2.5 + 80; this.baseDamage = Math.pow(this.scale,2)*10; this.baseFireRate = this.scale*0.4; }
+        constructor(x,y,r,s) { super(x,y,r,s, "Pulse"); this.baseRange = r*2.5 + 80; this.baseDamage = Math.pow(this.scale,2)*10; this.baseFireRate = this.scale*0.4; }
         draw(renderer, upgrades) {
             const color = this.isSnapped ? renderer.colors.turretSynergy : '#3498db';
             this.drawAuraAndRange(renderer, upgrades, color);
@@ -457,7 +458,7 @@
         }
     }
     class RapidTurret extends Turret {
-        constructor(x,y,r,s) { super(x,y,r,s, "Rapid (Triangle)"); this.baseRange = r*2.0 + 50; this.baseDamage = Math.pow(this.scale,1.5)*3; this.baseFireRate = this.scale*0.1; }
+        constructor(x,y,r,s, points) { super(x,y,r,s, "Rapid", points); this.baseRange = r*2.0 + 50; this.baseDamage = Math.pow(this.scale,1.5)*3; this.baseFireRate = this.scale*0.1; }
         draw(renderer, upgrades) {
             const color = this.isSnapped ? renderer.colors.turretSynergy : '#e74c3c';
             this.drawAuraAndRange(renderer, upgrades, color);
@@ -466,7 +467,7 @@
         }
     }
     class SniperTurret extends Turret {
-        constructor(x,y,r,s) { super(x,y,r,s, "Sniper (Square)"); this.baseRange = r*4.0 + 150; this.baseDamage = Math.pow(this.scale,2.5)*40; this.baseFireRate = this.scale*1.5; }
+        constructor(x,y,r,s, points) { super(x,y,r,s, "Sniper", points); this.baseRange = r*4.0 + 150; this.baseDamage = Math.pow(this.scale,2.5)*40; this.baseFireRate = this.scale*1.5; }
         draw(renderer, upgrades) {
             const color = this.isSnapped ? renderer.colors.turretSynergy : '#f39c12';
             this.drawAuraAndRange(renderer, upgrades, color);
@@ -475,7 +476,7 @@
         }
     }
     class SplashTurret extends Turret {
-        constructor(x,y,r,s) { super(x,y,r,s, "Splash (Pentagon)"); this.baseRange = r*3.0 + 100; this.baseDamage = Math.pow(this.scale,2.5)*30; this.baseFireRate = this.scale*2.0; this.splashRadius = 100; }
+        constructor(x,y,r,s, points) { super(x,y,r,s, "Splash", points); this.baseRange = r*3.0 + 100; this.baseDamage = Math.pow(this.scale,2.5)*30; this.baseFireRate = this.scale*2.0; this.splashRadius = 100; }
         draw(renderer, upgrades) {
             const color = this.isSnapped ? renderer.colors.turretSynergy : '#16a085';
             this.drawAuraAndRange(renderer, upgrades, color);
@@ -586,10 +587,10 @@
 
             if (input.mouse.clicked && this.isValid) {
                 this.endPlacement(); 
-                if (this.pendingType === 'Pulse') return new PulseTurret(mx, my, this.currentRadius, this.isSnapped);
-                if (this.pendingType === 'Rapid') return new RapidTurret(mx, my, this.currentRadius, this.isSnapped);
-                if (this.pendingType === 'Sniper') return new SniperTurret(mx, my, this.currentRadius, this.isSnapped);
-                if (this.pendingType === 'Splash') return new SplashTurret(mx, my, this.currentRadius, this.isSnapped);
+                if (this.pendingType === 'Pulse') return new PulseTurret(mx, my, this.currentRadius, this.isSnapped, pendingPoints);
+                if (this.pendingType === 'Rapid') return new RapidTurret(mx, my, this.currentRadius, this.isSnapped, pendingPoints);
+                if (this.pendingType === 'Sniper') return new SniperTurret(mx, my, this.currentRadius, this.isSnapped, pendingPoints);
+                if (this.pendingType === 'Splash') return new SplashTurret(mx, my, this.currentRadius, this.isSnapped, pendingPoints);
             } 
             return null;
         }
@@ -767,7 +768,7 @@
                     t.isHovered = (GeometrySystem.distSquared(this.input.mouse, t) < Math.pow(t.radius, 2));
                     if (t.isHovered) {
                         hoveredTurret = true; turretPanel.style.display = 'flex';
-                        document.getElementById('info-name').innerText = t.name + (t.isSnapped ? ' (Synergized)' : '');
+                        document.getElementById('info-name').innerText = t.type + (t.isSnapped ? ' (Synergized)' : '');
                         document.getElementById('info-dmg').innerText = Math.round(t.getCurrentDamage(this.upgrades));
                         document.getElementById('info-fire').innerText = t.getCurrentFireRate(this.upgrades).toFixed(2) + 's';
                         document.getElementById('info-range').innerText = Math.round(t.getCurrentRange(this.upgrades));
